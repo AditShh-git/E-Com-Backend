@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+	<meta charset="UTF-8" />
+	<title>Invoice</title>
+</head>
+
+<body
+	style="font-family: Arial, sans-serif; font-size: 14px; color: #111; margin: 0; padding: 0; background-color: #f6f6f6;">
+
+	<div style="max-width: 800px; margin: 30px auto; background-color: #fff; padding: 20px; border: 1px solid #ddd;">
+
+		<!-- Header -->
+		<div style="border-bottom: 2px solid #f0c14b; padding-bottom: 5px; margin-bottom: 20px;">
+			<p style="height: 30px;font-size:20px;font-weight:bold">AIM ONE</p>
+		</div>
+
+		<!-- Order Info -->
+		<table style="width: 100%; margin-bottom: 20px;">
+			<tr>
+				<td>
+					<strong>Order Number:</strong> ${orderNumber}<br />
+					<strong>Order Date:</strong> ${orderDate}
+				</td>
+				<td style="text-align: right;">
+					<strong>Invoice Date:</strong> ${invoiceDate}<br />
+					<strong>Invoice No:</strong> ${invoiceNumber}
+				</td>
+			</tr>
+		</table>
+
+		<!-- Addresses -->
+		<table style="width: 100%; margin-bottom: 20px;">
+			<tr>
+				<td style="width: 50%; vertical-align: top;">
+					<strong>Billing Address</strong><br />
+					${billingName}<br />
+					${billingAddress}
+				</td>
+				<td style="width: 50%; vertical-align: top;">
+					<strong>Shipping Address</strong><br />
+					${shippingName}<br />
+					${shippingAddress}
+				</td>
+			</tr>
+		</table>
+
+		<!-- Product Table -->
+		<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+			<thead>
+				<tr style="background-color: #f0f0f0;">
+					<th style="padding: 8px; border: 1px solid #ddd;">Item Name</th>
+					<th style="padding: 8px; border: 1px solid #ddd;">Quantity</th>
+					<th style="padding: 8px; border: 1px solid #ddd;">Unit Price</th>
+					<th style="padding: 8px; border: 1px solid #ddd;">Total</th>
+				</tr>
+			</thead>
+			<tbody>
+				${productRows}
+			</tbody>
+		</table>
+
+		<!-- Totals -->
+		<table style="width: 100%; border-collapse: collapse;">
+			<!--<tr>
+				<td style="text-align: right; padding: 8px;">Subtotal:</td>
+				<td style="text-align: right; padding: 8px; width: 150px;">${subtotal}</td>
+			</tr>
+			<tr>
+				<td style="text-align: right; padding: 8px;">Tax (10%):</td>
+				<td style="text-align: right; padding: 8px;">${tax}</td>
+			</tr>-->
+			<tr style="font-weight: bold;">
+				<td style="text-align: right; padding: 8px;">Total:</td>
+				<td style="text-align: right; padding: 8px;">${grandTotal}</td>
+			</tr>
+		</table>
+
+		<!-- Footer -->
+		<p style="margin-top: 30px; font-size: 12px; text-align: center; color: #666;">
+			Thank you for shopping with Aim one!
+		</p>
+
+	</div>
+
+</body>
+
+</html>
