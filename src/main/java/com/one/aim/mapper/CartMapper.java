@@ -16,209 +16,155 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class CartMapper {
 
-	public static CartRs mapToCartMinRs(CartBO bo) {
+    // -------------------------
+    // Single cart (min fields) with discount
+    // -------------------------
+    public static CartRs mapToCartMinRs(CartBO bo, int discountPercent, boolean discountEnabled) {
+        if (bo == null) return null;
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToCartRs(CartBO) ->");
-		}
+        CartRs rs = new CartRs();
+        rs.setDocId(String.valueOf(bo.getId()));
+        rs.setPName(bo.getPname());
+        rs.setDescription(bo.getDescription());
+        rs.setCategory(bo.getCategory());
+        rs.setOffer(bo.getOffer());
+        rs.setVarified(bo.isVarified());
 
-		try {
-			CartRs rs = null;
+        if (bo.getImage() != null) {
+            rs.setImage(bo.getImage());
+        }
 
-			if (null == bo) {
-				log.warn("UserBO is NULL");
-				return rs;
-			}
-			rs = new CartRs();
-			rs.setDocId(String.valueOf(bo.getId()));
-			if (Utils.isNotEmpty(bo.getPname())) {
-				rs.setPName(bo.getPname());
-			}
-			if (Utils.isNotEmpty(bo.getDescription())) {
-				rs.setDescription(bo.getDescription());
-			}
-			if (Utils.isNotEmpty(bo.getCategory())) {
-				rs.setCategory(bo.getCategory());
-			}
-			rs.setPrice(bo.getPrice());
-			rs.setOffer(bo.getOffer());
-			rs.setVarified(bo.isVarified());
-			if (bo.getImage() != null) {
-				rs.setImage(bo.getImage());
-			}
-			// rs.setAtts(AttachmentMapper.mapToAttachmentRsList(bo.getCartatts()));
-			return rs;
-		} catch (Exception e) {
-			log.error("Exception in mapToCartRs(CartBO) - " + e);
-			return null;
-		}
-	}
+        //  FIX 1: show correct stock
+        rs.setTotalItem(bo.getTotalitem());
 
-	public static List<CartRs> mapToCartMinRsList(List<CartBO> bos) {
+        //  FIX 2: show correct cart quantity (default 1)
+        rs.setQuantity(bo.getQuantity() > 0 ? bo.getQuantity() : 1);
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToCartRsList(CartBO) ->");
-		}
+        long original = bo.getPrice();
+        long discounted = calculateDiscountedPrice(original, discountPercent, discountEnabled);
 
-		try {
-			if (Utils.isEmpty(bos)) {
-				log.warn("UserBO is NULL");
-				return Collections.emptyList();
-			}
-			List<CartRs> rsList = new ArrayList<>();
-			for (CartBO bo : bos) {
-				CartRs rs = mapToCartMinRs(bo);
-				if (null != rs) {
-					rsList.add(rs);
-				}
-			}
-			return rsList;
-		} catch (Exception e) {
-			log.error("Exception in mapToCartRsList(CartBO) - " + e);
-			return Collections.emptyList();
-		}
-	}
+        rs.setOriginalPrice(original);
+        rs.setDiscountedPrice(discounted);
+        rs.setPrice(discounted);
 
-	public static CartRs mapToCartRs(CartBO bo) {
+        return rs;
+    }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToCartRs(CartBO) ->");
-		}
 
-		try {
-			CartRs rs = null;
+    public static CartRs mapToCartMinRs(CartBO bo) {
+        return mapToCartMinRs(bo, 0, false);
+    }
 
-			if (null == bo) {
-				log.warn("UserBO is NULL");
-				return rs;
-			}
-			rs = new CartRs();
-			rs.setDocId(String.valueOf(bo.getId()));
-			if (Utils.isNotEmpty(bo.getPname())) {
-				rs.setPName(bo.getPname());
-			}
-			System.out.println(rs.getPName() + "Hello--3");
-			if (Utils.isNotEmpty(bo.getDescription())) {
-				rs.setDescription(bo.getDescription());
-			}
-			if (Utils.isNotEmpty(bo.getCategory())) {
-				rs.setCategory(bo.getCategory());
-			}
-			if (bo.getImage() != null) {
-				rs.setImage(bo.getImage());
-			}
-			rs.setTotalItem(bo.getTotalitem());
-			rs.setSoldItem(bo.getSolditem());
-			rs.setPrice(bo.getPrice());
-			rs.setOffer(bo.getOffer());
-			rs.setVarified(bo.isVarified());
+    public static List<CartRs> mapToCartMinRsList(List<CartBO> bos, int discountPercent, boolean discountEnabled) {
+        if (bos == null || bos.isEmpty()) return Collections.emptyList();
+        List<CartRs> out = new ArrayList<>();
+        for (CartBO b : bos) {
+            CartRs r = mapToCartMinRs(b, discountPercent, discountEnabled);
+            if (r != null) out.add(r);
+        }
+        return out;
+    }
 
-			// rs.setAtts(AttachmentMapper.mapToAttachmentRsList(bo.getCartatts()));
-			return rs;
-		} catch (Exception e) {
-			log.error("Exception in mapToCartRs(CartBO) - " + e);
-			return null;
-		}
-	}
+    public static List<CartRs> mapToCartMinRsList(List<CartBO> bos) {
+        return mapToCartMinRsList(bos, 0, false);
+    }
 
-	public static List<CartRs> mapToCartRsList(List<CartBO> bos) {
+    // -------------------------
+    // Full cart mapping
+    // -------------------------
+    public static CartRs mapToCartRs(CartBO bo, int discountPercent, boolean discountEnabled) {
+        if (bo == null) return null;
+        CartRs rs = new CartRs();
+        rs.setDocId(String.valueOf(bo.getId()));
+        rs.setPName(bo.getPname());
+        rs.setDescription(bo.getDescription());
+        rs.setCategory(bo.getCategory());
+        rs.setTotalItem(bo.getTotalitem());
+        rs.setSoldItem(bo.getSolditem());
+        if (bo.getImage() != null) rs.setImage(bo.getImage());
+        rs.setOffer(bo.getOffer());
+        rs.setVarified(bo.isVarified());
+        rs.setQuantity(bo.getQuantity());
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToCartRsList(CartBO) ->");
-		}
+        long original = bo.getPrice();
+        long discounted = calculateDiscountedPrice(original, discountPercent, discountEnabled);
 
-		try {
-			if (Utils.isEmpty(bos)) {
-				log.warn("UserBO is NULL");
-				return Collections.emptyList();
-			}
-			List<CartRs> rsList = new ArrayList<>();
-			for (CartBO bo : bos) {
-				CartRs rs = mapToCartRs(bo);
-				if (null != rs) {
-					rsList.add(rs);
-				}
-			}
-			return rsList;
-		} catch (Exception e) {
-			log.error("Exception in mapToCartRsList(CartBO) - " + e);
-			return Collections.emptyList();
-		}
-	}
+        rs.setOriginalPrice(original);
+        rs.setDiscountedPrice(discounted);
+        rs.setPrice(discounted);
 
-	public static CartMaxRs mapToCartAdminRs(CartBO bo, SellerBO sellerBO, VendorBO vendorBO) {
+        return rs;
+    }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToCartRs(CartBO) ->");
-		}
+    public static CartRs mapToCartRs(CartBO bo) {
+        return mapToCartRs(bo, 0, false);
+    }
 
-		try {
-			CartMaxRs rs = null;
+    public static List<CartRs> mapToCartRsList(List<CartBO> bos, int discountPercent, boolean discountEnabled) {
+        if (bos == null || bos.isEmpty()) return Collections.emptyList();
+        List<CartRs> out = new ArrayList<>();
+        for (CartBO b : bos) {
+            CartRs r = mapToCartRs(b, discountPercent, discountEnabled);
+            if (r != null) out.add(r);
+        }
+        return out;
+    }
 
-			if (null == bo) {
-				log.warn("UserBO is NULL");
-				return rs;
-			}
-			rs = new CartMaxRs();
-			if (sellerBO != null) {
-				rs.setSeller(SellerMapper.mapToSellerRs(sellerBO));
-			}
-			if (vendorBO != null) {
-				rs.setVendor(VendorMapper.mapToVendorRs(vendorBO));
-			}
-			rs.setDocId(String.valueOf(bo.getId()));
-			if (Utils.isNotEmpty(bo.getPname())) {
-				rs.setPName(bo.getPname());
-			}
-			if (Utils.isNotEmpty(bo.getDescription())) {
-				rs.setDescription(bo.getDescription());
-			}
-			if (Utils.isNotEmpty(bo.getCategory())) {
-				rs.setCategory(bo.getCategory());
-			}
-			if (bo.getImage() != null) {
-				rs.setImage(bo.getImage());
-			}
-			rs.setTotalItem(bo.getTotalitem());
-			rs.setSoldItem(bo.getSolditem());
-			rs.setPrice(bo.getPrice());
-			rs.setOffer(bo.getOffer());
-			rs.setVarified(bo.isVarified());
+    public static List<CartRs> mapToCartRsList(List<CartBO> bos) {
+        return mapToCartRsList(bos, 0, false);
+    }
 
-			// rs.setAtts(AttachmentMapper.mapToAttachmentRsList(bo.getCartatts()));
-			return rs;
-		} catch (Exception e) {
-			log.error("Exception in mapToCartRs(CartBO) - " + e);
-			return null;
-		}
-	}
+    // -------------------------
+    // Admin mapping (with sellers/vendors)
+    // -------------------------
+    public static CartMaxRs mapToCartAdminRs(CartBO bo, SellerBO sellerBO, VendorBO vendorBO,
+                                             int discountPercent, boolean discountEnabled) {
+        if (bo == null) return null;
+        CartMaxRs rs = new CartMaxRs();
+        if (sellerBO != null) rs.setSeller(SellerMapper.mapToSellerRs(sellerBO));
+        if (vendorBO != null) rs.setVendor(VendorMapper.mapToVendorRs(vendorBO));
 
-	public static List<CartMaxRs> mapToCartAdminRsList(List<CartBO> bos, List<SellerBO> sellerBOs,
-			List<VendorBO> vendorBOs) {
+        rs.setDocId(String.valueOf(bo.getId()));
+        rs.setPName(bo.getPname());
+        rs.setDescription(bo.getDescription());
+        rs.setCategory(bo.getCategory());
+        rs.setTotalItem(bo.getTotalitem());
+        rs.setSoldItem(bo.getSolditem());
+        if (bo.getImage() != null) rs.setImage(bo.getImage());
+        rs.setOffer(bo.getOffer());
+        rs.setVarified(bo.isVarified());
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToCartRsList(CartBO) ->");
-		}
+        long original = bo.getPrice();
+        long discounted = calculateDiscountedPrice(original, discountPercent, discountEnabled);
 
-		try {
-			if (Utils.isEmpty(bos)) {
-				log.warn("UserBO is NULL");
-				return Collections.emptyList();
-			}
-			List<CartMaxRs> rsList = new ArrayList<>();
-			int index = 0;
-			for (CartBO bo : bos) {
-				CartMaxRs rs = mapToCartAdminRs(bo, sellerBOs.get(index), vendorBOs.get(index));
-				index++;
-				if (null != rs) {
-					rsList.add(rs);
-				}
-			}
-			return rsList;
-		} catch (Exception e) {
-			log.error("Exception in mapToCartRsList(CartBO) - " + e);
-			return Collections.emptyList();
-		}
-	}
+        rs.setOriginalPrice(original);
+        rs.setDiscountPrice(discounted);
 
+        rs.setPrice(discounted);
+
+
+        return rs;
+    }
+
+    public static List<CartMaxRs> mapToCartAdminRsList(List<CartBO> bos, List<SellerBO> sellerBOs,
+                                                       List<VendorBO> vendorBOs, int discountPercent, boolean discountEnabled) {
+        if (bos == null || bos.isEmpty()) return Collections.emptyList();
+        List<CartMaxRs> out = new ArrayList<>();
+        for (int i = 0; i < bos.size(); i++) {
+            SellerBO s = sellerBOs.size() > i ? sellerBOs.get(i) : null;
+            VendorBO v = vendorBOs.size() > i ? vendorBOs.get(i) : null;
+            out.add(mapToCartAdminRs(bos.get(i), s, v, discountPercent, discountEnabled));
+        }
+        return out;
+    }
+
+    // -------------------------
+    // Helpers
+    // -------------------------
+    private static long calculateDiscountedPrice(long original, int discountPercent, boolean enabled) {
+        if (!enabled || discountPercent <= 0) return original;
+        long discounted = original - Math.round(original * (discountPercent / 100.0));
+        return Math.max(0L, discounted);
+    }
 }
+

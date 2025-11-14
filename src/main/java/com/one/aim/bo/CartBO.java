@@ -21,50 +21,52 @@ import lombok.Setter;
 @Table(name = "cart")
 public class CartBO {
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.AUTO)
-	private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private Long id;
 
-	private String pname;
+    private String pname;
 
-	private String description;
+    private String description;
 
-	private long price;
+    private long price;
 
-	private String category;
+    private String category;
 
-	private boolean varified;
+    private boolean varified;
 
-	private boolean enabled = true;
+    private boolean enabled = true;
 
-	private int totalitem;
+    private int totalitem;
 
-	private int solditem;
+    private int solditem;
 
-	private int offer;
+    private int offer;
 
-	private Long cartempid;
+    private int returnDay;
 
-	private String cartempname;
+    // Quantity selected by user (default 1).
+    // Needed for order placement & invoice generation.
+    @Column(nullable = false)
+    private int quantity = 1;
 
-	// Cart Items relationship
-	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "user_cart_id")
-	private UserBO userCart;
+    private Long cartempid;
 
-	// Wishlist Items relationship
-	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "user_wishlist_id")
-	private UserBO userWishlist;
+    private String cartempname;
 
-	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "user_addcart_id") // 🔥 fixed lowercase, consistent
-	private UserBO userAddToCart;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_cart_id")
+    private UserBO userCart;
 
-//	@OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-//	@JoinColumn(name = "cart_id")
-//	private List<AttachmentBO> cartatts;
-	@Lob
-	@Column(name = "image", columnDefinition = "LONGBLOB")
-	private byte[] image;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_wishlist_id")
+    private UserBO userWishlist;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_addcart_id")
+    private UserBO userAddToCart;
+
+    @Lob
+    @Column(name = "image", columnDefinition = "LONGBLOB")
+    private byte[] image;
 }

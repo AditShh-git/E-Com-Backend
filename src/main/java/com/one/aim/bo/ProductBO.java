@@ -35,20 +35,23 @@ public class ProductBO {
 
     private Integer stock;
 
+    private boolean lowStock = false;
+
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id", nullable = false)
     private SellerBO seller;
 
-    // ✅ Multiple image IDs (store FileBO IDs from FileService)
+    //  Multiple image IDs (store FileBO IDs from FileService)
     @ElementCollection
     @CollectionTable(name = "product_images", joinColumns = @JoinColumn(name = "product_id"))
     @Column(name = "image_file_id")
     private List<Long> imageFileIds = new ArrayList<>();
 
-    // ✅ Optional category text (until CategoryBO is ready)
+    //  Optional category text (until CategoryBO is ready)
     private String categoryName;
 
-    // ✅ Unique slug or UUID for shareable links
+    //  Unique slug or UUID for shareable links
     @Column(unique = true, nullable = false, updatable = false)
     private String slug;
 
@@ -64,4 +67,9 @@ public class ProductBO {
             this.slug = UUID.randomUUID().toString();
         }
     }
+
+    public void updateLowStock() {
+        this.lowStock = (this.stock != null && this.stock <= 5);
+    }
+
 }

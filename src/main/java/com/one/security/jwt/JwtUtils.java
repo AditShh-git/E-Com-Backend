@@ -174,10 +174,10 @@ public class JwtUtils {
             Jwts.parser().decryptWith(key).build().parseEncryptedClaims(token);
             return true;
         } catch (MalformedJwtException | UnsupportedJwtException | IllegalArgumentException ex) {
-            log.error("❌ Invalid JWT Token: {}", ex.getMessage());
+            log.error(" Invalid JWT Token: {}", ex.getMessage());
             throw new BadCredentialsException("INVALID_CREDENTIALS", ex);
         } catch (ExpiredJwtException ex) {
-            log.error("❌ JWT Token expired: {}", ex.getMessage());
+            log.error(" JWT Token expired: {}", ex.getMessage());
             throw ex;
         }
     }

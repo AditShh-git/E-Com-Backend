@@ -2,7 +2,14 @@ package com.one.security.jwt;
 
 import java.io.IOException;
 
+import com.one.aim.repo.AdminRepo;
+import com.one.aim.repo.SellerRepo;
+import com.one.aim.repo.UserRepo;
+import com.one.aim.repo.VendorRepo;
+import com.one.security.LoggedUserContext;
+import com.one.service.impl.UserDetailsImpl;
 import io.jsonwebtoken.JwtException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -24,13 +31,16 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
+@RequiredArgsConstructor
 public class AuthTokenFilter extends OncePerRequestFilter {
 
-	@Autowired
-	private JwtUtils jwtUtils;
 
-	@Autowired
-	private UserDetailsServiceImpl userDetailsService;
+	private final JwtUtils jwtUtils;
+	private final UserDetailsServiceImpl userDetailsService;
+    private final UserRepo userRepo;
+    private final AdminRepo adminRepo;
+    private final SellerRepo sellerRepo;
+    private final VendorRepo vendorRepo;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -40,7 +50,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             String path = request.getRequestURI();
 
             // ===========================================================
-            // 🔹 Skip authentication for public endpoints
+            //  Skip authentication for public endpoints
             // ===========================================================
             if (path.contains("/api/auth/signin") ||
                     path.contains("/api/auth/signup") ||
@@ -52,57 +62,71 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             }
 
             // ===========================================================
-            // 🔹 Extract Bearer Token from Authorization header
+            //  Extract Bearer Token from Authorization header
             // ===========================================================
             String token = getTokenFromRequest(request);
-            if (StringUtils.hasText(token)) {
 
-                // 🔸 Validate & decrypt (AES-based, no signature check)
-                if (jwtUtils.validateToken(token)) {
+            if (StringUtils.hasText(token) && jwtUtils.validateToken(token)) {
+
+                // -----------------------------------------------------------
+                //  Extract EMAIL from token
+                // -----------------------------------------------------------
+                String email = jwtUtils.getEmailFromToken(token);
+
+                if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+
+                    UserDetailsImpl userDetails =
+                            (UserDetailsImpl) userDetailsService.loadUserByUsername(email);
+
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails, null, userDetails.getAuthorities()
+                            );
+
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
 
                     // ===========================================================
-                    // 🔹 Extract EMAIL (subject) from decrypted token
+                    // STORE LOGGED USER DETAILS FOR THIS REQUEST
                     // ===========================================================
-                    String email = jwtUtils.getEmailFromToken(token);
+                    Long id = null;
+                    String role = userDetails.getRole();
 
-                    if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                        UserDetails userDetails = userDetailsService.loadUserByUsername(email);
-
-                        UsernamePasswordAuthenticationToken authentication =
-                                new UsernamePasswordAuthenticationToken(
-                                        userDetails, null, userDetails.getAuthorities());
-
-                        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-                        log.info("✅ Authenticated user '{}' via encrypted JWT", email);
+                    switch (role) {
+                        case "USER":
+                            id = userRepo.findByEmail(email).get().getId();
+                            break;
+                        case "ADMIN":
+                            id = adminRepo.findByEmail(email).get().getId();
+                            break;
+                        case "SELLER":
+                            id = sellerRepo.findByEmail(email).get().getId();
+                            break;
+                        case "VENDOR":
+                            id = vendorRepo.findByEmail(email).get().getId();
+                            break;
                     }
+
+                    LoggedUserContext.setLoggedUserId(id);
+                    LoggedUserContext.setLoggedUserRole(role);
+
+                    log.info(" Authenticated [{}] ({})", role, email);
                 }
             }
 
-        } catch (ExpiredJwtException ex) {
-            log.warn("⚠️ Token expired: {}", ex.getMessage());
-            handleExpiredToken(ex, request);
-
-        } catch (BadCredentialsException ex) {
-            log.error("❌ Invalid credentials in token: {}", ex.getMessage());
-            request.setAttribute(StringConstants.JWT_BAD_CREDENTIALS, ErrorCodes.EC_INVALID_TOKEN);
-
-        } catch (JwtException ex) {
-            log.error("❌ Invalid or malformed token: {}", ex.getMessage());
-            request.setAttribute(StringConstants.JWT_INVALID_TOKEN, ErrorCodes.EC_INVALID_TOKEN);
+            filterChain.doFilter(request, response);
 
         } catch (Exception e) {
-            log.error("❌ Unexpected authentication error: {}", e.getMessage());
-            request.setAttribute(StringConstants.JWT_INVALID_TOKEN, ErrorCodes.EC_INVALID_TOKEN);
+            log.error(" Unexpected error in JWT filter: {}", e.getMessage());
+        } finally {
+            // ALWAYS CLEAR THREADLOCAL
+            LoggedUserContext.clear();
         }
-
-        // Proceed with filter chain
-        filterChain.doFilter(request, response);
     }
 
+
     // ===========================================================
-    // 🔹 Handle Expired Tokens (for Refresh Endpoint)
+    // Handle Expired Tokens (for Refresh Endpoint)
     // ===========================================================
     private void handleExpiredToken(ExpiredJwtException ex, HttpServletRequest request) {
         String isRefreshToken = request.getHeader("isRefreshToken");
@@ -120,7 +144,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     }
 
     // ===========================================================
-    // 🔹 Extract Token from Authorization Header
+    //  Extract Token from Authorization Header
     // ===========================================================
     private String getTokenFromRequest(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");

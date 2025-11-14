@@ -1,5 +1,11 @@
 package com.one.config;
 
+import com.one.aim.repo.AdminRepo;
+import com.one.aim.repo.SellerRepo;
+import com.one.aim.repo.UserRepo;
+import com.one.aim.repo.VendorRepo;
+import com.one.security.jwt.JwtUtils;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,128 +34,176 @@ import com.one.utils.EncryptionUtils;
 @EnableMethodSecurity(prePostEnabled = true)
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class WebSecurityConfig {
 
-	@Autowired
-	UserDetailsServiceImpl userDetailsService;
+    private final UserDetailsServiceImpl userDetailsService;
+    private final AuthEntryPointJwt unauthorizedHandler;
+    private final JwtUtils jwtUtils;
+    private final UserRepo userRepo;
+    private final AdminRepo adminRepo;
+    private final SellerRepo sellerRepo;
+    private final VendorRepo vendorRepo;
 
-	@Autowired
-	private AuthEntryPointJwt unauthorizedHandler;
+    // ---------------------------------------------------------------
+    //  1. JWT Filter Bean (Pass ALL 6 dependencies)
+    // ---------------------------------------------------------------
+    @Bean
+    public AuthTokenFilter authenticationJwtTokenFilter() {
+        return new AuthTokenFilter(
+                jwtUtils,
+                userDetailsService,
+                userRepo,
+                adminRepo,
+                sellerRepo,
+                vendorRepo
+        );
+    }
 
-	@Bean
-	public AuthTokenFilter authenticationJwtTokenFilter() {
-		return new AuthTokenFilter();
-	}
+    // ---------------------------------------------------------------
+    //  2. Authentication Provider
+    // ---------------------------------------------------------------
+    @Bean
+    public DaoAuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+        authProvider.setUserDetailsService(userDetailsService);
+        authProvider.setPasswordEncoder(passwordEncoder());
+        return authProvider;
+    }
 
-	public void configure(AuthenticationManagerBuilder authenticationManagerBuilder) throws Exception {
-		authenticationManagerBuilder.userDetailsService(userDetailsService).passwordEncoder(passwordEncoder());
-	}
+    // ---------------------------------------------------------------
+    //  3. Authentication Manager
+    // ---------------------------------------------------------------
+    @Bean
+    public AuthenticationManager authenticationManagerBean(AuthenticationConfiguration authConfig) throws Exception {
+        return authConfig.getAuthenticationManager();
+    }
 
-	@Bean
-	public AuthenticationManager authenticationManagerBean(AuthenticationConfiguration authConf) throws Exception {
-		return authConf.getAuthenticationManager();
-	}
+    // ---------------------------------------------------------------
+    //  4. Password Encoder (MD5-based)
+    // ---------------------------------------------------------------
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new PasswordEncoder() {
+            @Override
+            public String encode(CharSequence charSequence) {
+                try {
+                    return EncryptionUtils.makeMD5String(charSequence.toString());
+                } catch (Exception e) {
+                    return null;
+                }
+            }
 
-	@Bean
-	public DaoAuthenticationProvider authenticationProvider() {
-		DaoAuthenticationProvider authenticationProvider = new DaoAuthenticationProvider();
-		authenticationProvider.setPasswordEncoder(passwordEncoder());
-		authenticationProvider.setUserDetailsService(userDetailsService);
-		return authenticationProvider;
-	}
-
-	@Bean
-	public PasswordEncoder passwordEncoder() {
-		// return new BCryptPasswordEncoder();
-
-		return new PasswordEncoder() {
-			@Override
-			public String encode(CharSequence charSequence) {
-				try {
-					return EncryptionUtils.makeMD5String(charSequence.toString());
-				} catch (Exception e) {
-					return null;
-				}
-			}
-
-			@Override
-			public boolean matches(CharSequence charSequence, String s) {
-				try {
-					return EncryptionUtils.checkMD5Password(charSequence.toString(), s);
-				} catch (Exception e) {
-					return false;
-				}
-			}
-		};
-	}
+            @Override
+            public boolean matches(CharSequence charSequence, String s) {
+                try {
+                    return EncryptionUtils.checkMD5Password(charSequence.toString(), s);
+                } catch (Exception e) {
+                    return false;
+                }
+            }
+        };
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        return http
-                // ============================================================
-                // 🔒 BASIC SECURITY CONFIGURATION
-                // ============================================================
+
+        http
                 .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authenticationProvider(authenticationProvider())
 
-                // ============================================================
-                // 🔐 AUTHORIZATION RULES
-                // ============================================================
                 .authorizeHttpRequests(auth -> auth
 
-                        // ------------------------------------------------------------
-                        // 🟢 PUBLIC ENDPOINTS (accessible by everyone)
-                        // ------------------------------------------------------------
+                        // =============================
+                        // PUBLIC USER AUTH
+                        // =============================
                         .requestMatchers(
-                                "/api/auth/**",          // login, register, refresh
-                                "/api/public/**",        // public product info
-                                "/api/files/**"          // static or shared files
+                                "/api/user/signup",
+                                "/api/user/signin",
+                                "/api/user/forgot-password",
+                                "/api/user/reset-password",
+                                "/api/user/verify-email"
                         ).permitAll()
 
-                        // ------------------------------------------------------------
-                        // 🟡 SELLER-ONLY ENDPOINTS
-                        // ------------------------------------------------------------
-                        .requestMatchers("/api/seller/**")
-                        .hasAuthority("SELLER")
+                        // =============================
+                        // PUBLIC ADMIN AUTH
+                        // =============================
+                        .requestMatchers(
+                                "/api/admin/signup",
+                                "/api/admin/signin"
+                        ).permitAll()
 
-                        // ------------------------------------------------------------
-                        // 🔴 ADMIN-ONLY ENDPOINTS
-                        // ------------------------------------------------------------
-                        .requestMatchers("/api/admin/**", "/api/sellers/**")
-                        .hasAuthority("ADMIN")
+                        // =============================
+                        // PUBLIC SELLER AUTH
+                        // =============================
+                        .requestMatchers(
+                                "/api/seller/signup",
+                                "/api/seller/signin",
+                                "/api/seller/forgot-password",
+                                "/api/seller/reset-password"
+                        ).permitAll()
 
-                        // ------------------------------------------------------------
-                        // 🧩 DEFAULT RULE — all other routes require authentication
-                        // ------------------------------------------------------------
+                        // =============================
+                        // PUBLIC BROWSING ROUTES
+                        // =============================
+                        .requestMatchers(
+                                "/api/public/**",
+                                "/api/carts/**",
+                                "/api/search",
+                                "/api/cart/category/**"
+                        ).permitAll()
+
+                        // =============================
+                        // USER (MUST BE VERIFIED)
+                        // =============================
+                        .requestMatchers(
+                                "/api/cart/addtocart",
+                                "/api/order/save",
+                                "/api/user/me",
+                                "/api/user/logout",
+                                "/api/user/profile/update"
+                        ).hasAuthority("USER")
+
+                        // =============================
+                        // SELLER ROUTES
+                        // =============================
+                        .requestMatchers(
+                                "/api/seller/me",
+                                "/api/seller/carts",
+                                "/api/seller/product/**"
+                        ).hasAuthority("SELLER")
+
+                        // =============================
+                        // ADMIN ONLY ROUTES
+                        // =============================
+                        .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
+
                         .anyRequest().authenticated()
-                )
+                );
 
-                // ============================================================
-                // ⚙️ JWT FILTER (runs before username-password filter)
-                // ============================================================
-                .addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class)
+        http.addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);
 
-                // ============================================================
-                // 🚀 BUILD FILTER CHAIN
-                // ============================================================
-                .build();
+        return http.build();
     }
 
 
 
+
+    // ---------------------------------------------------------------
+    //  6. Swagger / Error Ignored from Security
+    // ---------------------------------------------------------------
     @Bean
-	WebSecurityCustomizer webSecurityCustomizer() {
-		// log.info("ingnoring the security");
-		return web -> web.ignoring()
-				.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/**")
-				.requestMatchers("/error/**");
-	}
-
-//    @Bean
-//    public JavaMailSender javaMailSender() {
-//        return new JavaMailSenderImpl();
-//    }
-
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return web -> web.ignoring()
+                .requestMatchers(
+                        "/swagger-ui.html",
+                        "/swagger-ui/**",
+                        "/v3/api-docs/**",
+                        "/actuator/**",
+                        "/error/**"
+                );
+    }
 }

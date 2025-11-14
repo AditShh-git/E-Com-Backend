@@ -12,19 +12,19 @@ import com.one.aim.bo.VendorBO;
 @Repository
 public interface VendorRepo extends JpaRepository<VendorBO, Long> {
 
-    // ✅ Find by email (used for login)
+    //  Find by email (used for login)
     Optional<VendorBO> findByEmail(String email);
 
-    // ✅ Replace old "findByUsername"
+    //  Replace old "findByUsername"
     VendorBO findByFullName(String fullName);
 
-    // ✅ Replace "findByEmailOrUsername" → fullName-based query
+    //  Replace "findByEmailOrUsername" → fullName-based query
     Optional<VendorBO> findByEmailOrFullName(String email, String fullName);
 
-    // ✅ Used for login or validation
+    //  Used for login or validation
     VendorBO findByIdAndFullName(Long id, String fullName);
 
-    // ✅ Keep as-is for multiple IDs
+    //  Keep as-is for multiple IDs
     List<VendorBO> findAllByIdIn(List<Long> ids);
 
 }

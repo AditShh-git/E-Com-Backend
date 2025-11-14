@@ -53,7 +53,7 @@ public class UserServiceImpl implements UserService {
     private final FileService fileService;
 
     // ============================================
-    // ✅ REGISTER / UPDATE USER
+    //  REGISTER / UPDATE USER
     // ============================================
     @Override
     @Transactional
@@ -126,7 +126,7 @@ public class UserServiceImpl implements UserService {
     }
 
     // ============================================
-    // ✅ RETRIEVE CURRENT USER
+    //  RETRIEVE CURRENT USER
     // ============================================
     @Override
     public BaseRs retrieveUser() throws Exception {
@@ -145,7 +145,7 @@ public class UserServiceImpl implements UserService {
     }
 
     // ============================================
-    // ✅ RETRIEVE ALL USERS (ADMIN ONLY)
+    //  RETRIEVE ALL USERS (ADMIN ONLY)
     // ============================================
     @Override
     public BaseRs retrieveAllUser() throws Exception {
@@ -168,7 +168,7 @@ public class UserServiceImpl implements UserService {
     }
 
     // ============================================
-    // ✅ DELETE USER (ADMIN)
+    //  DELETE USER (ADMIN)
     // ============================================
     @Override
     @Transactional
@@ -218,7 +218,7 @@ public class UserServiceImpl implements UserService {
             updated = true;
         }
 
-        // ✅ Optional image update
+        //  Optional image update
         if (request.getImage() != null && !request.getImage().isEmpty()) {
             try {
                 user.setImage(request.getImage().getBytes());
@@ -276,5 +276,41 @@ public class UserServiceImpl implements UserService {
         }
 
         return ResponseUtils.failure("NO_CHANGES", "No valid fields provided to update.");
+    }
+
+    @Override
+    public BaseRs verifyEmail(String token) {
+        Optional<UserBO> optUser = userRepo.findByVerificationToken(token);
+        if (optUser.isEmpty()) {
+            return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN, "Invalid or expired token");
+        }
+
+        UserBO user = optUser.get();
+
+        // Check expiry
+        if (user.getVerificationTokenExpiry() == null || user.getVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
+            return ResponseUtils.failure("TOKEN_EXPIRED", "Verification link has expired.");
+        }
+
+        // If it was a pending email update, apply it
+        if (user.getPendingEmail() != null && !user.getPendingEmail().isBlank()
+                && !user.getPendingEmail().equalsIgnoreCase(user.getEmail())) {
+
+            log.info("User {} verified new email: {}", user.getId(), user.getPendingEmail());
+            user.setEmail(user.getPendingEmail().toLowerCase());
+            user.setPendingEmail(null);
+        }
+
+        // Mark as verified and activate account
+        user.setEmailVerified(true);
+        user.setVerificationToken(null);
+        user.setVerificationTokenExpiry(null);
+        // Optionally mark active on email verification
+        if (!user.isActive()) {
+            user.setActive(true);
+        }
+
+        userRepo.save(user);
+        return ResponseUtils.success("Email verified successfully.");
     }
 }

@@ -25,105 +25,87 @@ import com.one.aim.service.SellerService;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
-@RequestMapping(value = "/api")
-@Slf4j
+@RequestMapping("/api/seller")
 @RequiredArgsConstructor
+@Slf4j
 public class SellerController {
 
     private final SellerService sellerService;
 
     // ===========================================================
-    // Seller Sign Up (with multipart/form-data)
+    // SELLER SIGN-UP (multipart/form-data)
     // ===========================================================
-    @PostMapping(value = "/auth/signup/seller", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> saveSeller(@ModelAttribute @Valid SellerRq rq) throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug("Executing RESTfulService [POST /auth/signup/seller]");
-        }
-
-        // image is already in rq.getImage()
+    @PostMapping(value = "/signup", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> saveSeller(@ModelAttribute SellerRq rq) throws Exception {
+        log.debug("Executing [POST /api/seller/signup]");
         return new ResponseEntity<>(sellerService.saveSeller(rq), HttpStatus.OK);
     }
 
     // ===========================================================
-// Seller Sign-In (Login)
-// ===========================================================
-    @PostMapping("/auth/signin/seller")
-    public ResponseEntity<?> signInSeller(@RequestBody @Valid LoginRq rq) throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug("Executing RESTfulService [POST /api/auth/seller/signin]");
-        }
-
+    // SELLER SIGN-IN
+    // ===========================================================
+    @PostMapping("/signin")
+    public ResponseEntity<?> signInSeller(@RequestBody LoginRq rq) throws Exception {
+        log.debug("Executing [POST /api/seller/signin]");
         return new ResponseEntity<>(sellerService.signInSeller(rq.getEmail(), rq.getPassword()), HttpStatus.OK);
     }
 
-
     // ===========================================================
-    // Retrieve Logged-in Seller
+    // GET LOGGED-IN SELLER
     // ===========================================================
-    @GetMapping("/seller-me")
+    @GetMapping("/me")
     public ResponseEntity<?> retrieveSeller() throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug("Executing RESTfulService [GET /find/seller]");
-        }
+        log.debug("Executing [GET /api/seller/me]");
         return new ResponseEntity<>(sellerService.retrieveSeller(), HttpStatus.OK);
     }
 
     // ===========================================================
-    // Retrieve All Sellers (Admin Only)
+    // GET ALL SELLERS (Admin)
     // ===========================================================
     @PreAuthorize("hasRole('ADMIN')")
-    @GetMapping("/sellers")
+    @GetMapping("/all")
     public ResponseEntity<?> retrieveSellers() throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug("Executing RESTfulService [GET /sellers]");
-        }
+        log.debug("Executing [GET /api/seller/all]");
         return new ResponseEntity<>(sellerService.retrieveSellers(), HttpStatus.OK);
     }
 
     // ===========================================================
-    // Retrieve Seller Carts
+    // GET SELLER CARTS
     // ===========================================================
-    @GetMapping("/find/seller/carts")
+    @GetMapping("/carts")   // ✅ FINAL PATH = /api/seller/carts (No conflict)
     public ResponseEntity<?> retrieveSellerCarts() throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug("Executing RESTfulService [GET /find/seller/carts]");
-        }
+        log.debug("Executing [GET /api/seller/carts]");
         return new ResponseEntity<>(sellerService.retrieveSellerCarts(), HttpStatus.OK);
     }
 
     // ===========================================================
-    // Delete Seller (Admin Only)
+    // DELETE SELLER (Admin)
     // ===========================================================
     @PreAuthorize("hasRole('ADMIN')")
-    @DeleteMapping("/delete/seller/{id}")
-    public ResponseEntity<?> deleteSeller(@PathVariable("id") String id) throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug("Executing RESTfulService [DELETE /delete/seller/{id}]");
-        }
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteSeller(@PathVariable String id) throws Exception {
+        log.debug("Executing [DELETE /api/seller/{}]", id);
         return new ResponseEntity<>(sellerService.deleteSeller(id), HttpStatus.OK);
     }
 
     // ===========================================================
-    // Forgot Password (Send Reset Link)
+    // FORGOT PASSWORD
     // ===========================================================
-    @PostMapping("/auth/seller/forgot-password")
-    public ResponseEntity<?> forgotPassword(@RequestParam("email") String email) throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug("Executing RESTfulService [POST /auth/seller/forgot-password]");
-        }
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestParam String email) throws Exception {
+        log.debug("Executing [POST /api/seller/forgot-password]");
         return new ResponseEntity<>(sellerService.forgotPassword(email), HttpStatus.OK);
     }
 
     // ===========================================================
-    // Reset Password (with Token)
+    // RESET PASSWORD
     // ===========================================================
-    @PostMapping("/auth/seller/reset-password")
-    public ResponseEntity<?> resetPassword(@RequestParam("token") String token,
-                                           @RequestParam("newPassword") String newPassword) throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug("Executing RESTfulService [POST /auth/seller/reset-password]");
-        }
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(
+            @RequestParam String token,
+            @RequestParam String newPassword) throws Exception {
+
+        log.debug("Executing [POST /api/seller/reset-password]");
         return new ResponseEntity<>(sellerService.resetPassword(token, newPassword), HttpStatus.OK);
     }
 }

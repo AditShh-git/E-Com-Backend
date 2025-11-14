@@ -26,7 +26,7 @@ public class EmailServiceImpl implements EmailService {
     private String fromEmail;
 
     // ===========================================================
-    // 🔹 Verification Email
+    //  Verification Email
     // ===========================================================
     @Async
     public void sendVerificationEmail(String toEmail, String fullName, String token) {
@@ -36,16 +36,16 @@ public class EmailServiceImpl implements EmailService {
             String htmlContent = buildVerificationEmailTemplate(fullName, verificationLink);
 
             sendHtmlEmail(toEmail, subject, htmlContent);
-            log.info("✅ Verification email sent successfully to: {}", toEmail);
+            log.info(" Verification email sent successfully to: {}", toEmail);
 
         } catch (Exception e) {
-            log.error("❌ Failed to send verification email to: {}", toEmail, e);
+            log.error(" Failed to send verification email to: {}", toEmail, e);
             throw new EmailSendFailedException("Unable to send verification email. Please try again later.");
         }
     }
 
     // ===========================================================
-    // 🔹 Reset Password Email
+    //  Reset Password Email
     // ===========================================================
     @Async
     public void sendResetPasswordEmail(String toEmail, String token) {
@@ -55,16 +55,16 @@ public class EmailServiceImpl implements EmailService {
             String htmlContent = buildResetPasswordEmailTemplate(resetUrl);
 
             sendHtmlEmail(toEmail, subject, htmlContent);
-            log.info("✅ Password reset email sent to {}", toEmail);
+            log.info(" Password reset email sent to {}", toEmail);
 
         } catch (Exception e) {
-            log.error("❌ Failed to send reset password email: {}", e.getMessage());
+            log.error(" Failed to send reset password email: {}", e.getMessage());
             throw new EmailSendFailedException("Unable to send password reset email. Please try again later.");
         }
     }
 
     // ===========================================================
-    // 🔹 Welcome Email
+    //  Welcome Email
     // ===========================================================
     @Async
     public void sendWelcomeEmail(String toEmail, String fullName) {
@@ -73,16 +73,16 @@ public class EmailServiceImpl implements EmailService {
             String htmlContent = buildWelcomeEmailTemplate(fullName);
 
             sendHtmlEmail(toEmail, subject, htmlContent);
-            log.info("✅ Welcome email sent successfully to: {}", toEmail);
+            log.info(" Welcome email sent successfully to: {}", toEmail);
 
         } catch (Exception e) {
-            log.error("❌ Failed to send welcome email to: {}", toEmail, e);
+            log.error(" Failed to send welcome email to: {}", toEmail, e);
             throw new EmailSendFailedException("Unable to send welcome email. Please try again later.");
         }
     }
 
     // ===========================================================
-    // 🔹 Reusable HTML Mail Sender
+    //  Reusable HTML Mail Sender
     // ===========================================================
     private void sendHtmlEmail(String to, String subject, String htmlContent) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
@@ -97,10 +97,10 @@ public class EmailServiceImpl implements EmailService {
     }
 
     // ===========================================================
-    // 🔹 Templates
+    //  Templates
     // ===========================================================
 
-    // ✅ Verification Template
+    //  Verification Template
     private String buildVerificationEmailTemplate(String fullName, String verificationLink) {
         return """
                 <html>
@@ -119,7 +119,7 @@ public class EmailServiceImpl implements EmailService {
                 """.formatted(fullName, verificationLink);
     }
 
-    // ✅ Reset Password Template
+    //  Reset Password Template
     private String buildResetPasswordEmailTemplate(String resetUrl) {
         return """
                 <html>
@@ -138,12 +138,12 @@ public class EmailServiceImpl implements EmailService {
                 """.formatted(resetUrl);
     }
 
-    // ✅ Welcome Template
+    //  Welcome Template
     private String buildWelcomeEmailTemplate(String fullName) {
         return """
                 <html>
                 <body style="font-family: Arial, sans-serif; color: #333;">
-                    <h2>Welcome, %s 🎉</h2>
+                    <h2>Welcome, %s </h2>
                     <p>We’re thrilled to have you on board! Explore the OneAim platform and make the most out of your journey.</p>
                     <p>Start your journey here:</p>
                     <p style="text-align: center;">
@@ -152,7 +152,7 @@ public class EmailServiceImpl implements EmailService {
                         </a>
                     </p>
                     <p>Have questions? Just reply to this email — we’re here to help.</p>
-                    <p>Cheers,<br>Team OneAim 🚀</p>
+                    <p>Cheers,<br>Team OneAim </p>
                 </body>
                 </html>
                 """.formatted(fullName, frontendUrl);

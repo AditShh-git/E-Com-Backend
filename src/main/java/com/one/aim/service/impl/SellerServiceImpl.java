@@ -10,6 +10,7 @@ import com.one.aim.bo.FileBO;
 import com.one.aim.helper.SellerHelper;
 import com.one.aim.rq.UpdateRq;
 import com.one.aim.rs.data.*;
+import com.one.aim.service.AdminSettingService;
 import com.one.aim.service.EmailService;
 import com.one.security.jwt.JwtUtils;
 import com.one.service.impl.UserDetailsImpl;
@@ -48,12 +49,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor // ✅ replaces @Autowired and generates constructor for final fields
+@RequiredArgsConstructor
 public class SellerServiceImpl implements SellerService {
 
-    // ===========================================================
-    // Dependencies (now immutable, injected via constructor)
-    // ===========================================================
+
     private final SellerRepo sellerRepo;
     private final CartRepo cartRepo;
     private final AdminRepo adminRepo;
@@ -61,6 +60,7 @@ public class SellerServiceImpl implements SellerService {
     private final FileService fileService;
     private final EmailService emailService;
     private final JwtUtils jwtUtils;
+    private final AdminSettingService  adminSettingService;
 
     // ===========================================================
     // Sign Up / Update Seller
@@ -77,7 +77,7 @@ public class SellerServiceImpl implements SellerService {
         SellerBO sellerBO;
 
         // ===========================================================
-        // ✅ If updating existing seller (admin verifying)
+        //  If updating existing seller (admin verifying)
         // ===========================================================
         if (Utils.isNotEmpty(docId)) {
             long id = Long.parseLong(docId);
@@ -98,7 +98,7 @@ public class SellerServiceImpl implements SellerService {
 
             sellerBO.setVerified(Boolean.parseBoolean(rq.getIsVerified()));
 
-            // ✅ Validate only updatable fields (isUpdate = true)
+            //  Validate only updatable fields (isUpdate = true)
             List<String> validationErrors = SellerHelper.validateSeller(rq, true);
             if (!validationErrors.isEmpty()) {
                 return ResponseUtils.failure(ErrorCodes.EC_INVALID_INPUT, validationErrors);
@@ -107,22 +107,31 @@ public class SellerServiceImpl implements SellerService {
             message = MessageCodes.MC_UPDATED_SUCCESSFUL;
         }
         // ===========================================================
-        // ✅ Else, creating new seller (signup)
+        //  Else, creating new seller (signup)
         // ===========================================================
         else {
-            sellerBO = new SellerBO();
 
-            // Full validation required
-            List<String> validationErrors = SellerHelper.validateSeller(rq, false);
-            if (!validationErrors.isEmpty()) {
-                return ResponseUtils.failure(ErrorCodes.EC_INVALID_INPUT, validationErrors);
-            }
+                // Check system setting: allow or block new seller registration
+                String allow = adminSettingService.get("allow_new_seller_registration");
 
-            message = MessageCodes.MC_SAVED_SUCCESSFUL;
+                if ("false".equalsIgnoreCase(allow)) {
+                    return ResponseUtils.failure("SELLER_REGISTRATION_DISABLED",
+                            "Seller registration is currently disabled by admin.");
+                }
+
+                sellerBO = new SellerBO();
+
+                // Full validation required
+                List<String> validationErrors = SellerHelper.validateSeller(rq, false);
+                if (!validationErrors.isEmpty()) {
+                    return ResponseUtils.failure(ErrorCodes.EC_INVALID_INPUT, validationErrors);
+                }
+
+                message = MessageCodes.MC_SAVED_SUCCESSFUL;
         }
 
         // ===========================================================
-        // ✅ Map request fields
+        //  Map request fields
         // ===========================================================
         sellerBO.setFullName(Utils.getValidString(rq.getFullName()));
         sellerBO.setEmail(Utils.getValidString(rq.getEmail()));
@@ -179,14 +188,14 @@ public class SellerServiceImpl implements SellerService {
         seller.setLogin(true);
         sellerRepo.save(seller);
 
-        // ✅ Generate tokens using EMAIL
+        //  Generate tokens using EMAIL
         String accessToken = jwtUtils.generateAccessToken(seller.getEmail());
         String refreshToken = jwtUtils.generateRefreshToken(seller.getEmail());
 
         SellerRs sellerRs = SellerMapper.mapToSellerRs(seller);
         String message = MessageCodes.MC_LOGIN_SUCCESSFUL;
 
-        // ✅ Add tokens to response
+        //  Add tokens to response
         LoginDataRs loginData = new LoginDataRs(message, accessToken, refreshToken,
                 seller.getId(), seller.getEmail(), seller.getFullName(), seller.getEmail());
 
@@ -204,7 +213,7 @@ public class SellerServiceImpl implements SellerService {
         log.debug("Executing retrieveSeller() ->");
 
         try {
-            // ✅ Get logged-in seller
+            //  Get logged-in seller
             Long sellerId = AuthUtils.findLoggedInUser().getDocId();
             Optional<SellerBO> optSeller = sellerRepo.findById(sellerId);
 
@@ -215,10 +224,10 @@ public class SellerServiceImpl implements SellerService {
 
             SellerBO sellerBO = optSeller.get();
 
-            // ✅ Map entity → response DTO
+            //  Map entity → response DTO
             SellerRs sellerRs = SellerMapper.mapToSellerRs(sellerBO);
 
-            // ✅ Retrieve and attach image bytes (if using FileService storage)
+            //  Retrieve and attach image bytes (if using FileService storage)
             if (sellerBO.getImageFileId() != null) {
                 try {
                     byte[] fileBytes = fileService.getContentFromGridFS(String.valueOf(sellerBO.getImageFileId()));
@@ -292,7 +301,7 @@ public class SellerServiceImpl implements SellerService {
 
         try {
             // ===========================================================
-            // 1️⃣ Validate Admin Access
+            //  Validate Admin Access
             // ===========================================================
             Optional<AdminBO> optAdmin = adminRepo.findById(AuthUtils.findLoggedInUser().getDocId());
             if (optAdmin.isEmpty()) {
@@ -301,7 +310,7 @@ public class SellerServiceImpl implements SellerService {
             }
 
             // ===========================================================
-            // 2️⃣ Validate Seller Exists
+            //  Validate Seller Exists
             // ===========================================================
             Optional<SellerBO> optSeller = sellerRepo.findById(Long.valueOf(id));
             if (optSeller.isEmpty()) {
@@ -312,7 +321,7 @@ public class SellerServiceImpl implements SellerService {
             SellerBO sellerBO = optSeller.get();
 
             // ===========================================================
-            // 3️⃣ Delete Seller’s Uploaded Image (if exists)
+            //  Delete Seller’s Uploaded Image (if exists)
             // ===========================================================
             if (sellerBO.getImageFileId() != null) {
                 try {
@@ -327,7 +336,7 @@ public class SellerServiceImpl implements SellerService {
             }
 
             // ===========================================================
-            // 4️⃣ Delete Seller Record
+            //  Delete Seller Record
             // ===========================================================
             sellerRepo.deleteById(sellerBO.getId());
 
@@ -336,7 +345,7 @@ public class SellerServiceImpl implements SellerService {
                     sellerBO.getFullName());
 
             // ===========================================================
-            // 5️⃣ Prepare Response
+            //  Prepare Response
             // ===========================================================
             SellerRs sellerRs = SellerMapper.mapToSellerRs(sellerBO);
             return ResponseUtils.success(new SellerDataRs(MessageCodes.MC_DELETED_SUCCESSFUL, sellerRs));
@@ -358,7 +367,7 @@ public class SellerServiceImpl implements SellerService {
     @Override
     public BaseRs forgotPassword(String email) throws Exception {
         log.debug("Executing forgotPassword(email) -> {}", email);
-        log.info("🔍 Normalized email before lookup: '{}'", email.trim().toLowerCase());
+        log.info(" Normalized email before lookup: '{}'", email.trim().toLowerCase());
 
 
         String normalizedEmail = email.trim().toLowerCase();
@@ -387,7 +396,7 @@ public class SellerServiceImpl implements SellerService {
                 "If you didn’t request this, please ignore this email.";
 
         try {
-            emailService.sendVerificationEmail(seller.getEmail(), subject, body); // ✅ Reuse your email sender
+            emailService.sendVerificationEmail(seller.getEmail(), subject, body); //  Reuse your email sender
         } catch (Exception e) {
             log.error("Error sending password reset email: {}", e.getMessage());
             return ResponseUtils.failure(ErrorCodes.EC_EMAIL_SEND_FAILED);
@@ -440,7 +449,7 @@ public class SellerServiceImpl implements SellerService {
         SellerBO seller = sellerRepo.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("Seller not found with email: " + email));
 
-        // ✅ Validate input (isUpdate = true)
+        //  Validate input (isUpdate = true)
         List<String> validationErrors = SellerHelper.validateSeller(rq, true);
         if (!validationErrors.isEmpty()) {
             return ResponseUtils.failure(ErrorCodes.EC_INVALID_INPUT, validationErrors);
@@ -458,7 +467,7 @@ public class SellerServiceImpl implements SellerService {
             updated = true;
         }
 
-        // ✅ Optional password change
+        //  Optional password change
         if (Utils.isNotEmpty(rq.getPassword()) && rq.getPassword().length() >= 6) {
             seller.setPassword(passwordEncoder.encode(rq.getPassword()));
             updated = true;

@@ -32,9 +32,9 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        log.debug("🔍 Attempting authentication for email: {}", email);
+        log.debug(" Attempting authentication for email: {}", email);
 
-        // ✅ Check each repository (email-based login only)
+        //  Check each repository (email-based login only)
         UserBO user = userRepo.findByEmail(email).orElse(null);
         AdminBO admin = adminRepo.findByEmail(email).orElse(null);
         SellerBO seller = sellerRepo.findByEmail(email).orElse(null);
@@ -42,11 +42,11 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         DeliveryPersonBO delivery = deliveryPersonRepo.findByEmail(email).orElse(null);
 
         if (user == null && admin == null && seller == null && vendor == null && delivery == null) {
-            log.error("❌ User not found with email: {}", email);
+            log.error(" User not found with email: {}", email);
             throw new UsernameNotFoundException("User not found with email: " + email);
         }
 
-        // ✅ Normalize to a unified user object
+        //  Normalize to a unified user object
         UserBO unifiedUser = new UserBO();
 
         if (admin != null) {
@@ -81,7 +81,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
             unifiedUser.setRole("USER");
         }
 
-        log.info("✅ Authenticated [{}] ({})", unifiedUser.getRole(), unifiedUser.getEmail());
+        log.info(" Authenticated [{}] ({})", unifiedUser.getRole(), unifiedUser.getEmail());
         return UserDetailsImpl.build(unifiedUser);
     }
 }

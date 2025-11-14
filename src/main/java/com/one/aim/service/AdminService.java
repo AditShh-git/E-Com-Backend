@@ -5,12 +5,19 @@ import com.one.vm.core.BaseRs;
 
 public interface AdminService {
 
-	public BaseRs saveAdmin(AdminRq rq) throws Exception;
+    /**
+     * Create or Update an Admin
+     */
+    BaseRs saveAdmin(AdminRq rq) throws Exception;
 
-	public BaseRs retrieveAdmin() throws Exception;
+    /**
+     * Get currently logged-in Admin profile
+     */
+    BaseRs retrieveAdmin() throws Exception;
 
-	public BaseRs deleteAdmin(String id) throws Exception;
-
-	// public AdminBO getAdminBOById(Long id);
+    /**
+     * Delete admin by ID
+     */
+    BaseRs deleteAdmin(String id) throws Exception;
 
 }

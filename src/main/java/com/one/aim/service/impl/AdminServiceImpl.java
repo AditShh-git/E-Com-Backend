@@ -3,6 +3,7 @@ package com.one.aim.service.impl;
 import java.util.List;
 import java.util.Optional;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,125 +29,130 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class AdminServiceImpl implements AdminService {
 
-	@Autowired
-	AdminRepo adminRepo;
+    private final AdminRepo adminRepo;
+    private final PasswordEncoder passwordEncoder;
+    private final FileService fileService;
 
-	@Autowired
-	private PasswordEncoder passwordEncoder;
+    // =========================================================
+    // ADMIN SIGNUP / UPDATE
+    // =========================================================
+    @Override
+    public BaseRs saveAdmin(AdminRq rq) throws Exception {
 
-	@Autowired
-	FileService fileService;
+        log.debug("Executing saveAdmin()");
 
-	// Sign Up
-	@Override
-	public BaseRs saveAdmin(AdminRq rq) throws Exception {
+        List<String> errors = AdminHelper.validateAdmin(rq);
+        if (Utils.isNotEmpty(errors)) {
+            return ResponseUtils.failure(ErrorCodes.EC_INVALID_INPUT, errors);
+        }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing saveCompany(CompanyRq) ->");
-		}
+        AdminBO adminBO;
+        String docId = Utils.getValidString(rq.getDocId());
+        String message;
 
-		List<String> errors = AdminHelper.validateAdmin(rq);
+        // --------------------------
+        // UPDATE
+        // --------------------------
+        if (Utils.isNotEmpty(docId)) {
 
-		if (Utils.isNotEmpty(errors)) {
-			log.error(ErrorCodes.EC_INVALID_INPUT);
-			return ResponseUtils.failure(ErrorCodes.EC_INVALID_INPUT, errors);
-		}
-		String docId = Utils.getValidString(rq.getDocId());
-		String message = StringConstants.EMPTY;
-		AdminBO adminBO = null;
-		if (Utils.isNotEmpty(docId)) { // UPDATE
-			long id = Long.parseLong(docId);
-			Optional<AdminBO> optAdminBO = adminRepo.findById(id);
-			adminBO = optAdminBO.get();
-			if (adminBO == null) {
-				log.error(ErrorCodes.EC_USER_NOT_FOUND);
-				return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND);
-			}
-		} else {
-			adminBO = new AdminBO(); // SAVE
-			message = MessageCodes.MC_SAVED_SUCCESSFUL;
-		}
-		String email = Utils.getValidString(rq.getEmail());
-		if (!email.equals(Utils.getValidString(adminBO.getEmail()))) {
-			adminBO.setEmail(email);
-		}
-		String userName = Utils.getValidString(rq.getUserName());
-		if (!userName.equals(adminBO.getFullName())) {
-			adminBO.setFullName(userName);
-		}
-		String phoneNo = Utils.getValidString(rq.getPhoneNo());
-		if (!phoneNo.equals(adminBO.getPhoneNo())) {
-			adminBO.setPhoneNo(phoneNo);
-		}
-		String rawPassword = Utils.getValidString(rq.getPassword());
-		String existingEncodedPassword = adminBO.getPassword();
+            adminBO = adminRepo.findById(Long.parseLong(docId))
+                    .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_ADMIN_NOT_FOUND));
 
-		if (!passwordEncoder.matches(rawPassword, existingEncodedPassword)) {
-			String hashedPassword = passwordEncoder.encode(rawPassword);
-			System.out.println("Hashed Password: " + hashedPassword);
-			adminBO.setPassword(hashedPassword);
-		}
-		adminBO.setRole("ADMIN");
-		// adminBO.setAtts(fileService.prepareAttBOs(rq.getElExemptionAtts(), null));
-		//adminBO.setImageid(rq.getImageid());
-		if (rq.getImage() != null) {
-			adminBO.setImage(rq.getImage()); // ✅ convert file to byte[]
-		}
-		adminRepo.save(adminBO);
-		AdminRs adminRs = AdminMapper.mapToAdminRs(adminBO);
-		return ResponseUtils.success(new AdminDataRs(message, adminRs));
-	}
+            message = MessageCodes.MC_UPDATED_SUCCESSFUL;
 
-//	public AdminBO getAdminBOById(Long id) {
-//		Optional<AdminBO> admin = adminRepo.findById(id);
-//        return admin.orElse(null);
-//	}
+        } else {
+            // --------------------------
+            // CREATE
+            // --------------------------
+            adminBO = new AdminBO();
+            adminBO.setRole("ADMIN");
+            message = MessageCodes.MC_SAVED_SUCCESSFUL;
+        }
 
-	public BaseRs retrieveAdmin() throws Exception {
+        // Email
+        String email = Utils.getValidString(rq.getEmail());
+        if (!email.equals(Utils.getValidString(adminBO.getEmail()))) {
+            adminBO.setEmail(email);
+        }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing retrieveUser() ->");
-		}
-		try {
-			Optional<AdminBO> optAdmin = adminRepo.findById(AuthUtils.findLoggedInUser().getDocId());
-			if (optAdmin.isEmpty()) {
-				log.error(ErrorCodes.EC_USER_NOT_FOUND);
-				return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND);
-			}
-			AdminBO adminBO = optAdmin.get();
-			AdminRs adminRs = AdminMapper.mapToAdminRs(adminBO);
-			String message = MessageCodes.MC_RETRIEVED_SUCCESSFUL;
-			return ResponseUtils.success(new AdminDataRs(message, adminRs));
-		} catch (Exception e) {
-			log.error("Exception retrieveUser() ->" + e);
-			return null;
-		}
-	}
+        // Name
+        String fullName = Utils.getValidString(rq.getUserName());
+        if (!fullName.equals(Utils.getValidString(adminBO.getFullName()))) {
+            adminBO.setFullName(fullName);
+        }
 
-	@Override
-	public BaseRs deleteAdmin(String id) throws Exception {
+        // Phone
+        String phone = Utils.getValidString(rq.getPhoneNo());
+        if (!phone.equals(Utils.getValidString(adminBO.getPhoneNo()))) {
+            adminBO.setPhoneNo(phone);
+        }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing deleteAdmin() ->");
-		}
-		try {
-			Optional<AdminBO> optAdmin = adminRepo.findById(Long.valueOf(id));
-			if (optAdmin.isEmpty()) {
-				log.error(ErrorCodes.EC_ADMIN_NOT_FOUND);
-				return ResponseUtils.failure(ErrorCodes.EC_ADMIN_NOT_FOUND);
-			}
-			AdminBO adminBO = optAdmin.get();
-			adminRepo.deleteById(Long.valueOf(id));
-			AdminRs adminRs = AdminMapper.mapToAdminRs(adminBO);
-			String message = MessageCodes.MC_DELETED_SUCCESSFUL;
-			return ResponseUtils.success(new AdminDataRs(message, adminRs));
-		} catch (Exception e) {
-			log.error("Exception deleteAdmin() ->" + e);
-			return null;
-		}
-	}
+        // Password (correct fix)
+        String rawPassword = Utils.getValidString(rq.getPassword());
+
+        if (Utils.isNotEmpty(rawPassword)) {
+            if (!passwordEncoder.matches(rawPassword, Utils.getValidString(adminBO.getPassword()))) {
+                adminBO.setPassword(passwordEncoder.encode(rawPassword));
+            }
+        }
+
+        // Image
+        if (rq.getImage() != null) {
+            adminBO.setImage(rq.getImage());
+        }
+
+        adminRepo.save(adminBO);
+
+        return ResponseUtils.success(
+                new AdminDataRs(message, AdminMapper.mapToAdminRs(adminBO))
+        );
+    }
+
+
+    // =========================================================
+    // GET LOGGED-IN ADMIN PROFILE
+    // =========================================================
+    @Override
+    public BaseRs retrieveAdmin() throws Exception {
+
+        log.debug("Executing retrieveAdmin()");
+
+        Long loggedId = AuthUtils.findLoggedInUser().getDocId();
+        AdminBO adminBO = adminRepo.findById(loggedId)
+                .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_ADMIN_NOT_FOUND));
+
+        return ResponseUtils.success(
+                new AdminDataRs(
+                        MessageCodes.MC_RETRIEVED_SUCCESSFUL,
+                        AdminMapper.mapToAdminRs(adminBO)
+                )
+        );
+    }
+
+
+    // =========================================================
+    // DELETE ADMIN
+    // =========================================================
+    @Override
+    public BaseRs deleteAdmin(String id) throws Exception {
+
+        log.debug("Executing deleteAdmin()");
+
+        AdminBO adminBO = adminRepo.findById(Long.valueOf(id))
+                .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_ADMIN_NOT_FOUND));
+
+        adminRepo.delete(adminBO);
+
+        return ResponseUtils.success(
+                new AdminDataRs(
+                        MessageCodes.MC_DELETED_SUCCESSFUL,
+                        AdminMapper.mapToAdminRs(adminBO)
+                )
+        );
+    }
 
 //@Override
 //public AdminBO getAdminBOById(Long id) {

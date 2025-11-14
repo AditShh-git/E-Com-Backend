@@ -15,19 +15,12 @@ public class WishlistRs implements Serializable {
 
 	private static final long serialVersionUID = 1L;
 
-	private String docId;
-
-	private String pName;
-
-	private String description;
-
-	private long price;
-
-	private String category;
-
-	private int offer;
-
-	private byte[] image;
+    private String productId;
+    private String name;
+    private String description;
+    private double price;
+    private String category;
+    private Long imageId;
 
 }
 

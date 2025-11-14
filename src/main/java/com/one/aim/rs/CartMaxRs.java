@@ -24,6 +24,9 @@ public class CartMaxRs implements Serializable {
 
 	private long price;
 
+    private long discountPrice;
+    private long originalPrice;
+
 	private String category;
 
 	private boolean enabled = true;

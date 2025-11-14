@@ -11,22 +11,22 @@ import com.one.aim.bo.SellerBO;
 @Repository
 public interface SellerRepo extends JpaRepository<SellerBO, Long> {
 
-    // ✅ Find by full name
+    //  Find by full name
     Optional<SellerBO> findByFullName(String fullName);
 
     Optional<SellerBO> findByEmailIgnoreCase(String email);
 
 
-    // ✅ Find by email (used for login)
+    //  Find by email (used for login)
     Optional<SellerBO> findByEmail(String email);
 
-    // ✅ Replaces old findByEmailOrUsername
+    //  Replaces old findByEmailOrUsername
     Optional<SellerBO> findByEmailOrFullName(String email, String fullName);
 
-    // ✅ Used for verifying logged-in identity
+    //  Used for verifying logged-in identity
     SellerBO findByIdAndFullName(Long id, String fullName);
 
-    // ✅ Keep this for list retrievals
+    //  Keep this for list retrievals
     List<SellerBO> findAllByIdIn(List<Long> ids);
 
 }

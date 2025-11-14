@@ -2,6 +2,7 @@ package com.one.aim.controller;
 
 import com.one.aim.rq.ProductRq;
 import com.one.aim.service.ProductService;
+import com.one.vm.core.BaseRs;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -26,9 +27,10 @@ public class ProductController {
     // ===========================================================
     @PreAuthorize("hasAuthority('SELLER')")
     @PostMapping(value = "/add", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> addProduct(@ModelAttribute ProductRq rq) throws Exception {
+    public ResponseEntity<BaseRs> addProduct(@ModelAttribute ProductRq rq) throws Exception {
         log.debug("Executing RESTfulService [POST /api/seller/product/add]");
-        return ResponseEntity.ok(productService.addProduct(rq));
+        BaseRs response = productService.addProduct(rq);
+        return ResponseEntity.ok(response);
     }
 
     // ===========================================================
@@ -36,9 +38,10 @@ public class ProductController {
     // ===========================================================
     @PreAuthorize("hasAuthority('SELLER')")
     @PutMapping(value = "/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> updateProduct(@ModelAttribute ProductRq rq) throws Exception {
+    public ResponseEntity<BaseRs> updateProduct(@ModelAttribute ProductRq rq) throws Exception {
         log.debug("Executing RESTfulService [PUT /api/seller/product/update]");
-        return ResponseEntity.ok(productService.updateProduct(rq));
+        BaseRs response = productService.updateProduct(rq);
+        return ResponseEntity.ok(response);
     }
 
     // ===========================================================
@@ -46,10 +49,13 @@ public class ProductController {
     // ===========================================================
     @PreAuthorize("hasAuthority('SELLER')")
     @PostMapping(value = "/{productId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> uploadProductImages(@PathVariable Long productId,
-                                                 @RequestParam("files") List<MultipartFile> files) throws Exception {
+    public ResponseEntity<BaseRs> uploadProductImages(
+            @PathVariable Long productId,
+            @RequestParam("files") List<MultipartFile> files) throws Exception {
+
         log.debug("Executing RESTfulService [POST /api/seller/product/{}/images]", productId);
-        return ResponseEntity.ok(productService.uploadProductImages(productId, files));
+        BaseRs response = productService.uploadProductImages(productId, files);
+        return ResponseEntity.ok(response);
     }
 
     // ===========================================================
@@ -57,10 +63,13 @@ public class ProductController {
     // ===========================================================
     @PreAuthorize("hasAnyAuthority('SELLER', 'ADMIN')")
     @DeleteMapping("/{productId}/images/{imageId}")
-    public ResponseEntity<?> deleteProductImage(@PathVariable Long productId,
-                                                @PathVariable Long imageId) throws Exception {
+    public ResponseEntity<BaseRs> deleteProductImage(
+            @PathVariable Long productId,
+            @PathVariable Long imageId) throws Exception {
+
         log.debug("Executing RESTfulService [DELETE /api/seller/product/{}/images/{}]", productId, imageId);
-        return ResponseEntity.ok(productService.deleteProductImage(productId, imageId));
+        BaseRs response = productService.deleteProductImage(productId, imageId);
+        return ResponseEntity.ok(response);
     }
 
     // ===========================================================
@@ -68,8 +77,9 @@ public class ProductController {
     // ===========================================================
     @PreAuthorize("hasAnyAuthority('SELLER', 'ADMIN')")
     @DeleteMapping("/{productId}")
-    public ResponseEntity<?> deleteProduct(@PathVariable Long productId) throws Exception {
+    public ResponseEntity<BaseRs> deleteProduct(@PathVariable Long productId) throws Exception {
         log.debug("Executing RESTfulService [DELETE /api/seller/product/{}]", productId);
-        return ResponseEntity.ok(productService.deleteProduct(productId));
+        BaseRs response = productService.deleteProduct(productId);
+        return ResponseEntity.ok(response);
     }
 }

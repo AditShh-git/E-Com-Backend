@@ -36,7 +36,7 @@ public class CartController {
 			log.debug("Executing RESTfulService [POST /user]");
 		}
 		if (file != null && !file.isEmpty()) {
-			rq.setImage(file.getBytes()); // ✅ convert file to byte[]
+			rq.setImage(file.getBytes()); //  convert file to byte[]
 		}
 		return new ResponseEntity<>(cartService.saveCart(rq), HttpStatus.OK);
 	}

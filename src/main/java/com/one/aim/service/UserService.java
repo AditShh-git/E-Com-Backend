@@ -11,12 +11,14 @@ public interface UserService {
 
     BaseRs updateUserProfile(String email, UpdateRq request);
 
-    // ✅ Retrieve currently logged-in user
+    //  Retrieve currently logged-in user
     BaseRs retrieveUser() throws Exception;
 
-    // ✅ Retrieve all users (admin only)
+    //  Retrieve all users (admin only)
     BaseRs retrieveAllUser() throws Exception;
 
-    // ✅ Delete user (admin)
+    //  Delete user (admin)
     BaseRs deleteUser(String id) throws Exception;
+
+    BaseRs verifyEmail(String token);
 }

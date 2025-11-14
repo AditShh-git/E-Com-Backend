@@ -82,7 +82,7 @@ public class UserBO {
 
     @Column(nullable = false)
     @Builder.Default
-    private Boolean login = false; // ✅ Add this for login tracking
+    private Boolean login = false; //  Add this for login tracking
 
     public boolean isActive() {
         return Boolean.TRUE.equals(active);
@@ -125,10 +125,16 @@ public class UserBO {
 	@OneToMany(mappedBy = "userAddToCart", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY)
     private List<CartBO> addtoCart = new ArrayList<>();
 
-	@OneToMany(mappedBy = "userWishlist", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-	private List<CartBO> wishlistItems = new ArrayList<>();
+    @ManyToMany
+    @JoinTable(
+            name = "user_wishlist",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "product_id")
+    )
+    private List<ProductBO> wishlistProducts = new ArrayList<>();
 
-	
+
+
 //	@Lob
 //	@Column(name = "image", columnDefinition = "LONGBLOB")
 //	private byte[] image;

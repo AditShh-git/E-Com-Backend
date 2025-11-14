@@ -41,7 +41,7 @@ public class AuthServiceImpl implements AuthService {
     private final EmailService emailService;
 
     // ============================================
-    // ✅ SIGN IN
+    //  SIGN IN
     // ============================================
     @Override
     public BaseRs signIn(Authentication authentication) throws Exception {
@@ -55,14 +55,14 @@ public class AuthServiceImpl implements AuthService {
                 accessToken,
                 refreshToken,
                 userDetails.getId(),
-                userDetails.getEmail(),     // ✅ email as main identity
+                userDetails.getEmail(),     //  email as main identity
                 userDetails.getFullName(),
                 userDetails.getEmail()
         ));
     }
 
     // ============================================
-    // ✅ FORGOT PASSWORD
+    //  FORGOT PASSWORD
     // ============================================
     @Transactional
     @Override
@@ -74,13 +74,13 @@ public class AuthServiceImpl implements AuthService {
 
         UserBO user = userOpt.get();
 
-        // 🔑 Generate token & expiry
+        //  Generate token & expiry
         String resetToken = UUID.randomUUID().toString();
         user.setResetToken(resetToken);
         user.setResetTokenExpiry(LocalDateTime.now().plusMinutes(30));
         userRepo.save(user);
 
-        // 📧 Send actual email
+        //  Send actual email
         String resetLink = "https://yourfrontend.com/reset-password?token=" + resetToken;
         String subject = "Password Reset Request";
         String body = "Hello " + user.getFullName() + ",\n\n"
@@ -90,19 +90,19 @@ public class AuthServiceImpl implements AuthService {
                 + "Best regards,\nYour App Team";
 
         try {
-            // ✉️ Send email (assuming you have JavaMailSender configured)
+            //  Send email (assuming you have JavaMailSender configured)
             SimpleMailMessage message = new SimpleMailMessage();
             message.setTo(email);
             message.setSubject(subject);
             message.setText(body);
             javaMailSender.send(message);
-            log.info("✅ Password reset email sent to {}", email);
+            log.info(" Password reset email sent to {}", email);
         } catch (Exception e) {
-            log.error("❌ Failed to send reset email: {}", e.getMessage());
+            log.error(" Failed to send reset email: {}", e.getMessage());
             return ResponseUtils.failure("Failed to send email. Please try again later.");
         }
 
-        // 🔁 Return success + token for testing
+        //  Return success + token for testing
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Password reset link sent to email");
         response.put("resetToken", resetToken); // only for testing — remove in production
@@ -117,12 +117,12 @@ public class AuthServiceImpl implements AuthService {
     }
 
     // ============================================
-// ✅ RESET PASSWORD (All roles supported)
+//  RESET PASSWORD (All roles supported)
 // ============================================
     @Transactional
     @Override
     public BaseRs resetPassword(String token, String newPassword) {
-        // 🔍 Lookup user by reset token
+        //  Lookup user by reset token
         Optional<UserBO> optUser = userRepo.findByResetToken(token);
         if (optUser.isEmpty()) {
             return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN, "Invalid or expired reset token");
@@ -130,27 +130,27 @@ public class AuthServiceImpl implements AuthService {
 
         UserBO user = optUser.get();
 
-        // ⏳ Check if token expired
+        //  Check if token expired
         if (user.getResetTokenExpiry() == null || user.getResetTokenExpiry().isBefore(LocalDateTime.now())) {
             return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED, "Reset token expired");
         }
 
-        // 🔑 Encode and update password
+        //  Encode and update password
         user.setPassword(passwordEncoder.encode(newPassword));
         user.setResetToken(null);
         user.setResetTokenExpiry(null);
         userRepo.save(user);
 
-        log.info("✅ Password reset for {} (Role: {})", user.getEmail(), user.getRole());
+        log.info(" Password reset for {} (Role: {})", user.getEmail(), user.getRole());
 
-        // 🎉 Return success response
+        //  Return success response
         return ResponseUtils.success(
                 new BaseDataRs("Password successfully reset", Map.of("role", user.getRole()))
         );
     }
 
     // ============================================
-    // ✅ LOGOUT
+    //  LOGOUT
     // ============================================
     @Transactional
     @Override

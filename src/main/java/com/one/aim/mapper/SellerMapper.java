@@ -32,7 +32,7 @@ public class SellerMapper {
         rs.setRole(bo.getRole());
         rs.setVerified(bo.isVerified());
 
-        // ✅ Handle image reference (via fileService)
+        //  Handle image reference (via fileService)
         if (bo.getImageFileId() != null) {
             rs.setImageUrl("/api/files/" + bo.getImageFileId() + "/view");
         }

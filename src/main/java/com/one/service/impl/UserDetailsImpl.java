@@ -32,7 +32,7 @@ public class UserDetailsImpl implements UserDetails {
     }
 
     public static UserDetailsImpl build(UserBO user) {
-        // 🩵 Fix: add role-based authority
+        //  Fix: add role-based authority
         List<GrantedAuthority> authorities =
                 List.of(new SimpleGrantedAuthority(user.getRole()));
 
@@ -70,6 +70,14 @@ public class UserDetailsImpl implements UserDetails {
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return authorities;
+    }
+
+    public String getRole() {
+        // authorities contains something like: [ROLE_USER] or [USER]
+        return authorities.stream()
+                .findFirst()
+                .map(GrantedAuthority::getAuthority)
+                .orElse(null);
     }
 
     @Override

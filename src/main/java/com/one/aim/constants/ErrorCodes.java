@@ -37,8 +37,8 @@ public class ErrorCodes {
 
     // AUTH / LOGIN ERRORS
     // ===========================================================
-    public static final String EC_INVALID_CREDENTIALS = "EC_INVALID_CREDENTIALS"; // 👈 added
-    public static final String EC_ACCOUNT_NOT_VERIFIED = "EC_ACCOUNT_NOT_VERIFIED"; // 👈 added
+    public static final String EC_INVALID_CREDENTIALS = "EC_INVALID_CREDENTIALS"; //  added
+    public static final String EC_ACCOUNT_NOT_VERIFIED = "EC_ACCOUNT_NOT_VERIFIED"; //  added
     public static final String EC_ACCOUNT_LOCKED = "EC_ACCOUNT_LOCKED"; // optional
     public static final String EC_TOKEN_EXPIRED = "EC_TOKEN_EXPIRED";
     public static final String EC_INVALID_TOKEN = "EC_INVALID_TOKEN";
@@ -125,7 +125,7 @@ public class ErrorCodes {
     public static final String EC_ORDER_NOT_FOUND           = "EC_ORDER_NOT_FOUND";
 
     // ===========================================================
-    // ✅ Seller-Specific Validation Errors
+    //  Seller-Specific Validation Errors
     // ===========================================================
 
     // Full Name

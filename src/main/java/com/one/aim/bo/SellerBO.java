@@ -51,7 +51,7 @@ public class SellerBO {
 
     @Column(nullable = false)
     @Builder.Default
-    private boolean verified = false; // ✅ renamed from isVarified
+    private boolean verified = false; //  renamed from isVarified
 
     @Column(nullable = false)
     @Builder.Default
@@ -59,13 +59,13 @@ public class SellerBO {
 
     @Column(nullable = false)
     @Builder.Default
-    private String role = "SELLER"; // ✅ renamed from roll
+    private String role = "SELLER"; //  renamed from roll
 
 //    @Lob
 //    @Column(name = "image", columnDefinition = "LONGBLOB")
 //    private byte[] image;
 
-//     ✅ Store file reference instead
+//      Store file reference instead
     @Column(name = "image_file_id")
     private Long imageFileId;
 

@@ -19,8 +19,16 @@ public interface ProductService {
 
     BaseRs deleteProductImage(Long productId, Long imageId) throws Exception;
 
-    ProductRs getShareableProduct(String slug) throws Exception;
+    String getShareableProduct(String slug) throws Exception;
+
 
     BaseRs deleteProduct(Long productId) throws Exception;
+
+    BaseRs listProducts(int offset, int limit) throws Exception;
+
+    BaseRs getProductsByCategory(String category, int offset, int limit) throws Exception;
+
+    BaseRs searchProducts(String name, int offset, int limit) throws Exception;
+
 
 }

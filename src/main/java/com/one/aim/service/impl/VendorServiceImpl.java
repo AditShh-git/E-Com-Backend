@@ -126,7 +126,7 @@ public class VendorServiceImpl implements VendorService {
 		vendorBO.setRoll("VENDOR");
 		// adminBO.setAtts(fileService.prepareAttBOs(rq.getElExemptionAtts(), null));
 		if (rq.getImage() != null) {
-			vendorBO.setImage(rq.getImage()); // ✅ convert file to byte[]
+			vendorBO.setImage(rq.getImage()); //  convert file to byte[]
 		}
 		vendorRepo.save(vendorBO);
 		VendorRs adminRs = VendorMapper.mapToVendorRs(vendorBO);

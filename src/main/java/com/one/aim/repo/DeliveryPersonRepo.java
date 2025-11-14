@@ -11,15 +11,15 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface DeliveryPersonRepo extends JpaRepository<DeliveryPersonBO, Long> {
 
-    // ✅ Find by email (used for login)
+    //  Find by email (used for login)
     Optional<DeliveryPersonBO> findByEmail(String email);
 
-    // ✅ Replaces old findByEmailOrUsername
+    //  Replaces old findByEmailOrUsername
     Optional<DeliveryPersonBO> findByEmailOrFullName(String email, String fullName);
 
-    // ✅ If you need it for authorization or identity verification
+    //  If you need it for authorization or identity verification
     DeliveryPersonBO findByIdAndFullName(Long id, String fullName);
 
-    // ⚙️ Example for filtering (if needed in future)
+    //  Example for filtering (if needed in future)
     // List<DeliveryPersonBO> findByCityAndStatus(String city, String status);
 }

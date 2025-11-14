@@ -21,5 +21,8 @@ public interface OrderRepo extends JpaRepository<OrderBO, Long> {
 	@Query("SELECT o FROM OrderBO o JOIN o.cartempids c WHERE c = :userId")
     List<OrderBO> findByCartempid(@Param("userId") Long userId);
 
+    OrderBO findByInvoiceno(String invoiceno);
+
+
 
 }

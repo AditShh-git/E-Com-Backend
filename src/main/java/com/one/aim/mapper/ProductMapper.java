@@ -11,21 +11,36 @@ import java.util.List;
 @Slf4j
 public class ProductMapper {
     public static ProductRs mapToProductRs(ProductBO bo, FileService fileService) {
+
         if (bo == null) {
             log.warn("ProductBO is NULL");
             return null;
         }
 
         ProductRs rs = new ProductRs();
+
         rs.setDocId(String.valueOf(bo.getId()));
         rs.setName(bo.getName());
         rs.setDescription(bo.getDescription());
-        rs.setPrice(bo.getPrice());
-        rs.setStock(bo.getStock());
+
+        //  FIX: Always return price safely
+        rs.setPrice(bo.getPrice() == null ? 0.0 : bo.getPrice());
+
+        //  FIX: make stock safe (0 if null)
+        rs.setStock(bo.getStock() == null ? 0 : bo.getStock());
+
         rs.setCategoryName(bo.getCategoryName());
         rs.setSlug(bo.getSlug());
-        rs.setSellerName(bo.getSeller() != null ? bo.getSeller().getFullName() : null);
 
+        //  NEW: Most e-commerce sites show "default quantity = 1"
+        rs.setQuantity(1);
+
+        // Seller name
+        if (bo.getSeller() != null) {
+            rs.setSellerName(bo.getSeller().getFullName());
+        }
+
+        // Product images
         if (bo.getImageFileIds() != null && !bo.getImageFileIds().isEmpty()) {
             List<String> urls = bo.getImageFileIds().stream()
                     .map(id -> "/api/files/" + id + "/view")
@@ -33,18 +48,15 @@ public class ProductMapper {
             rs.setImageUrls(urls);
         }
 
-        // Optionally add share link (if you want automatic)
-        rs.setShareMessage("🛒 Check out this on ShopEase: " + rs.getName() +
-                " — " + rs.getDescription() + "\n👉 " +
-                "http://localhost:8989/aimdev/api/public/product/" + rs.getSlug());
+        // Shareable link
+        String shareLink = "http://localhost:8989/aimdev/api/public/product/" + bo.getSlug();
+        rs.setShareMessage("Check out this product: " + bo.getName() + "\n" + shareLink);
 
         return rs;
     }
 
-
     public static List<ProductRs> mapToProductRsList(List<ProductBO> bos, FileService fileService) {
         if (bos == null || bos.isEmpty()) {
-            log.warn("ProductBO list is empty");
             return Collections.emptyList();
         }
 

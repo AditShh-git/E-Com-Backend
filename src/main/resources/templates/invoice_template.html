@@ -1,0 +1,161 @@
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8" />
+    <title>Invoice</title>
+
+
+    <style type="text/css">
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            font-size: 14px;
+            color: #333333;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        .section-title {
+            font-weight: bold;
+            text-decoration: underline;
+            margin-bottom: 5px;
+            font-size: 16px;
+        }
+
+        .details-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        .details-table td {
+            vertical-align: top;
+            padding: 10px;
+            border: 1px solid #dddddd;
+            background: #f8f8f8;
+        }
+
+        table.items {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 25px;
+        }
+
+        table.items th, table.items td {
+            border: 1px solid #e0e0e0;
+            padding: 10px;
+        }
+
+        table.items th {
+            background: #f0f0f0;
+            font-weight: bold;
+        }
+
+        .summary-table {
+            margin-top: 30px;
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .summary-table td {
+            padding: 8px;
+        }
+
+        .summary-label {
+            text-align: right;
+            font-weight: bold;
+        }
+
+        .footer {
+            margin-top: 40px;
+            font-size: 12px;
+            text-align: center;
+            color: #777777;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="header">
+    <h1>INVOICE</h1>
+</div>
+
+<div>
+    <p><strong>Invoice No:</strong> {{invoiceNo}}</p>
+    <p><strong>Order ID:</strong> {{orderId}}</p>
+    <p><strong>Date:</strong> {{orderDate}}</p>
+</div>
+
+<!-- REPLACED FLEX WITH TABLE (flex not supported by OpenHTMLToPDF) -->
+<table class="details-table">
+    <tr>
+        <!-- Customer -->
+        <td>
+            <div class="section-title">Customer Details</div>
+            <p><strong>{{customerName}}</strong></p>
+            <p>{{street}}, {{city}}</p>
+            <p>{{state}} - {{zip}}</p>
+            <p>{{country}}</p>
+            <p>Phone: {{phone}}</p>
+        </td>
+
+        <!-- Seller -->
+        <td>
+            <div class="section-title">Seller Details</div>
+            <p><strong>{{sellerName}}</strong></p>
+            <p>{{sellerAddress}}</p>
+            <p>{{sellerPhone}}</p>
+            <p>{{sellerEmail}}</p>
+        </td>
+    </tr>
+</table>
+
+<!-- ORDER ITEMS -->
+<table class="items">
+    <thead>
+    <tr>
+        <th>#</th>
+        <th>Product</th>
+        <th>Price</th>
+        <th>Qty</th>
+        <th>Total</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    {{orderItems}}
+    </tbody>
+</table>
+
+<!-- SUMMARY -->
+<table class="summary-table">
+    <tr>
+        <td class="summary-label">Subtotal:</td>
+        <td>{{subTotal}}</td>
+    </tr>
+
+    <tr>
+        <td class="summary-label">Tax ({{taxPercent}}%):</td>
+        <td>{{taxAmount}}</td>
+    </tr>
+
+    <tr>
+        <td class="summary-label" style="font-size:16px;">Grand Total:</td>
+        <td style="font-size:16px;"><strong>{{totalAmount}}</strong></td>
+    </tr>
+</table>
+
+<div class="footer">
+    <p>This is a computer-generated invoice and does not require a physical signature.</p>
+</div>
+
+</body>
+</html>

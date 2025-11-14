@@ -10,16 +10,16 @@ import java.util.Optional;
 @Repository
 public interface AdminRepo extends JpaRepository<AdminBO, Long> {
 
-    // ✅ Find by email (for login)
+    //  Find by email (for login)
     Optional<AdminBO> findByEmail(String email);
 
-    // ✅ Find by full name (display or lookup)
+    //  Find by full name (display or lookup)
     Optional<AdminBO> findByFullName(String fullName);
 
-    // ✅ Used for authentication checks (id + full name)
+    //  Used for authentication checks (id + full name)
     AdminBO findByIdAndFullName(Long id, String fullName);
 
-    // ✅ Replaces old findByEmailOrUsername
+    //  Replaces old findByEmailOrUsername
     Optional<AdminBO> findByEmailOrFullName(String email, String fullName);
 
 }
