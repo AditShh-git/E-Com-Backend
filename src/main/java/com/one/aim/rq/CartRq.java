@@ -1,8 +1,5 @@
 package com.one.aim.rq;
 
-import java.util.Collections;
-import java.util.List;
-
 import com.one.vm.core.BaseVM;
 
 import lombok.Getter;
@@ -14,30 +11,22 @@ import lombok.Setter;
 @NoArgsConstructor
 public class CartRq extends BaseVM {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	private String docId;
+    private String docId;   // cartId when updating
 
-	private String pName;
+    private Long productId; // REQUIRED for creating cart snapshot
 
-	private String description;
+    private String pName;       // (ignored during creation, used only when updating)
+    private String description; // (ignored during creation)
+    private String category;    // (ignored during creation)
 
-	private long price;
+    private long price;     // (ignored during creation)
+    private int offer;      // currently not used, but kept for future
+    private int returnDay;
 
-	private String category;
+    private boolean enabled = true;
 
-	private boolean enabled = true;
-
-	private String isVarified;
-
-	private int offer;
-
-	private int totalItem;
-
-	// private List<AttachmentRq> atts = Collections.emptyList();
-
-	private byte[] image;
-
-	//public boolean isVerified;
+    private byte[] image; // optional snapshot image
 
 }

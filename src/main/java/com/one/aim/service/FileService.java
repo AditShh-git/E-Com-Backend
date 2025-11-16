@@ -1,5 +1,6 @@
 package com.one.aim.service;
 
+import java.io.IOException;
 import java.util.List;
 
 import org.springframework.web.multipart.MultipartFile;
@@ -22,5 +23,8 @@ public interface FileService {
 	public List<AttachmentBO> prepareAttBOs(List<AttachmentRq> vms, String userName);
 
     FileBO uploadAndReturnFile(MultipartFile file) throws Exception;
+
+    FileBO uploadBytes(byte[] data, String filename) throws IOException;
+
 
 }

@@ -3,6 +3,10 @@ package com.one.aim.service.impl;
 import java.util.List;
 import java.util.Optional;
 
+import com.one.aim.repo.SellerRepo;
+import com.one.aim.repo.UserRepo;
+import com.one.aim.service.EmailService;
+import com.one.utils.TokenUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,6 +30,7 @@ import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -33,84 +38,117 @@ import lombok.extern.slf4j.Slf4j;
 public class AdminServiceImpl implements AdminService {
 
     private final AdminRepo adminRepo;
+    private final UserRepo userRepo;
+    private final SellerRepo sellerRepo;
     private final PasswordEncoder passwordEncoder;
-    private final FileService fileService;
+    private final EmailService emailService;
 
     // =========================================================
-    // ADMIN SIGNUP / UPDATE
+    // CREATE ADMIN (with email verification)
     // =========================================================
     @Override
-    public BaseRs saveAdmin(AdminRq rq) throws Exception {
+    @Transactional
+    public BaseRs createAdmin(AdminRq rq) throws Exception {
 
-        log.debug("Executing saveAdmin()");
+        log.debug("Executing createAdmin()");
 
         List<String> errors = AdminHelper.validateAdmin(rq);
         if (Utils.isNotEmpty(errors)) {
             return ResponseUtils.failure(ErrorCodes.EC_INVALID_INPUT, errors);
         }
 
-        AdminBO adminBO;
+        String email = rq.getEmail().trim().toLowerCase();
+
+        if (adminRepo.findByEmailIgnoreCase(email).isPresent()
+                || userRepo.findByEmailIgnoreCase(email).isPresent()
+                || sellerRepo.findByEmailIgnoreCase(email).isPresent()) {
+            return ResponseUtils.failure("EMAIL_EXISTS", "Email already registered with another account.");
+        }
+
+
+        AdminBO adminBO = new AdminBO();
+        adminBO.setRole("ADMIN");
+        adminBO.setFullName(Utils.getValidString(rq.getUserName()));
+        adminBO.setEmail(email);
+        adminBO.setPhoneNo(Utils.getValidString(rq.getPhoneNo()));
+
+        String rawPassword = Utils.getValidString(rq.getPassword());
+        adminBO.setPassword(passwordEncoder.encode(rawPassword));
+
+        if (rq.getImage() != null && rq.getImage().length > 0) {
+            adminBO.setImage(rq.getImage());
+        }
+
+        // Email verification token
+        String token = TokenUtils.generateVerificationToken();
+        adminBO.setVerificationToken(token);
+        adminBO.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+        adminBO.setEmailVerified(false);
+        adminBO.setActive(false);
+        adminBO.setLogin(false);
+
+        adminRepo.save(adminBO);
+
+        // Send verification email
+        emailService.sendVerificationEmail(
+                adminBO.getEmail(),
+                adminBO.getFullName(),
+                token
+        );
+
+        return ResponseUtils.success(
+                new AdminDataRs(MessageCodes.MC_SAVED_SUCCESSFUL,
+                        AdminMapper.mapToAdminRs(adminBO))
+        );
+    }
+
+    // =========================================================
+    // UPDATE ADMIN PROFILE (no email verification logic here)
+    // =========================================================
+    @Override
+    @Transactional
+    public BaseRs updateAdmin(AdminRq rq) throws Exception {
+
+        log.debug("Executing updateAdmin()");
+
         String docId = Utils.getValidString(rq.getDocId());
-        String message;
-
-        // --------------------------
-        // UPDATE
-        // --------------------------
-        if (Utils.isNotEmpty(docId)) {
-
-            adminBO = adminRepo.findById(Long.parseLong(docId))
-                    .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_ADMIN_NOT_FOUND));
-
-            message = MessageCodes.MC_UPDATED_SUCCESSFUL;
-
-        } else {
-            // --------------------------
-            // CREATE
-            // --------------------------
-            adminBO = new AdminBO();
-            adminBO.setRole("ADMIN");
-            message = MessageCodes.MC_SAVED_SUCCESSFUL;
+        if (Utils.isEmpty(docId)) {
+            return ResponseUtils.failure(ErrorCodes.EC_REQUIRED_DOCID);
         }
 
-        // Email
-        String email = Utils.getValidString(rq.getEmail());
-        if (!email.equals(Utils.getValidString(adminBO.getEmail()))) {
-            adminBO.setEmail(email);
-        }
+        AdminBO adminBO = adminRepo.findById(Long.parseLong(docId))
+                .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_ADMIN_NOT_FOUND));
 
-        // Name
+        // full name
         String fullName = Utils.getValidString(rq.getUserName());
-        if (!fullName.equals(Utils.getValidString(adminBO.getFullName()))) {
+        if (Utils.isNotEmpty(fullName)) {
             adminBO.setFullName(fullName);
         }
 
-        // Phone
+        // phone
         String phone = Utils.getValidString(rq.getPhoneNo());
-        if (!phone.equals(Utils.getValidString(adminBO.getPhoneNo()))) {
+        if (Utils.isNotEmpty(phone)) {
             adminBO.setPhoneNo(phone);
         }
 
-        // Password (correct fix)
+        // password
         String rawPassword = Utils.getValidString(rq.getPassword());
-
         if (Utils.isNotEmpty(rawPassword)) {
-            if (!passwordEncoder.matches(rawPassword, Utils.getValidString(adminBO.getPassword()))) {
-                adminBO.setPassword(passwordEncoder.encode(rawPassword));
-            }
+            adminBO.setPassword(passwordEncoder.encode(rawPassword));
         }
 
-        // Image
-        if (rq.getImage() != null) {
+        // image
+        if (rq.getImage() != null && rq.getImage().length > 0) {
             adminBO.setImage(rq.getImage());
         }
 
         adminRepo.save(adminBO);
 
         return ResponseUtils.success(
-                new AdminDataRs(message, AdminMapper.mapToAdminRs(adminBO))
+                new AdminDataRs(MessageCodes.MC_UPDATED_SUCCESSFUL,
+                        AdminMapper.mapToAdminRs(adminBO))
         );
     }
-
 
     // =========================================================
     // GET LOGGED-IN ADMIN PROFILE
@@ -132,11 +170,11 @@ public class AdminServiceImpl implements AdminService {
         );
     }
 
-
     // =========================================================
     // DELETE ADMIN
     // =========================================================
     @Override
+    @Transactional
     public BaseRs deleteAdmin(String id) throws Exception {
 
         log.debug("Executing deleteAdmin()");
@@ -153,10 +191,4 @@ public class AdminServiceImpl implements AdminService {
                 )
         );
     }
-
-//@Override
-//public AdminBO getAdminBOById(Long id) {
-//	// TODO Auto-generated method stub
-//	return null;
-//}
 }

@@ -118,11 +118,19 @@ public class UserBO {
     private byte[] image;
 
 
-	// Add cart by ADMIN,SELLER,VENDOR
-	@OneToMany(mappedBy = "userCart", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-	private List<CartBO> cartItems = new ArrayList<>();
+    // REMOVED: Old User → Cart mapping `mappedBy = "userCart"`
+// Reason: CartBO no longer has a field named `userCart`.
+// Keeping it caused Hibernate startup failure.
+// Fix: We now use only `userAddToCart` as the correct relation.
 
-	@OneToMany(mappedBy = "userAddToCart", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY)
+    // Add cart by ADMIN,SELLER,VENDOR
+//	@OneToMany(mappedBy = "userCart", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+//	private List<CartBO> cartItems = new ArrayList<>();
+
+    // ============================================
+    // USER ADD-TO-CART (One User → Many Carts)
+    // ============================================
+    @OneToMany(mappedBy = "userAddToCart", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CartBO> addtoCart = new ArrayList<>();
 
     @ManyToMany

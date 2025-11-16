@@ -22,51 +22,30 @@ import lombok.Setter;
 public class CartBO {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // Product linked at time of add-to-cart
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id", nullable = false)
+    private ProductBO product;
+
+    // snapshot details
     private String pname;
-
-    private String description;
-
     private long price;
 
-    private String category;
-
-    private boolean varified;
-
+    private int quantity = 1;
     private boolean enabled = true;
 
-    private int totalitem;
+    // seller reference for invoice
+    private Long sellerId;
 
-    private int solditem;
-
-    private int offer;
-
-    private int returnDay;
-
-    // Quantity selected by user (default 1).
-    // Needed for order placement & invoice generation.
-    @Column(nullable = false)
-    private int quantity = 1;
-
-    private Long cartempid;
-
-    private String cartempname;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_cart_id")
-    private UserBO userCart;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_wishlist_id")
-    private UserBO userWishlist;
-
+    // The user who has this cart in their AddToCart
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_addcart_id")
     private UserBO userAddToCart;
 
     @Lob
-    @Column(name = "image", columnDefinition = "LONGBLOB")
+    @Column(columnDefinition = "LONGBLOB")
     private byte[] image;
 }

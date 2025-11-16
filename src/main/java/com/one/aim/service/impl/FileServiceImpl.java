@@ -1,11 +1,6 @@
 package com.one.aim.service.impl;
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.file.Files;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -36,6 +31,8 @@ import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 
 import lombok.extern.slf4j.Slf4j;
+
+
 
 @Slf4j
 @Service("fileService")
@@ -220,38 +217,50 @@ public class FileServiceImpl implements FileService {
 		}
 	}
 
-	@Override
-	public byte[] getContentFromGridFS(String fileId) throws Exception {
+    @Override
+    public byte[] getContentFromGridFS(String fileId) throws Exception {
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing getContentFromGridFS(fileId) ->");
-		}
+        if (log.isDebugEnabled()) {
+            log.debug("Executing getContentFromGridFS(fileId) ->");
+        }
 
-		if (Utils.isEmpty(fileId)) {
-			return (new byte[0]);
-		}
+        if (Utils.isEmpty(fileId)) {
+            return new byte[0];
+        }
 
-		FileBO fileBO = fileRepo.findByIdAndEnabledIsTrue(Long.valueOf(fileId));
-		if (fileBO == null) {
-			return null;
-		}
-		String finalPath = FileHelper.prepareChunksDir(fileBO.getPath());
-		File folder = new File(finalPath);
-		if (folder == null || !folder.exists()) {
-			log.error("Folder does not exist - " + finalPath);
-			return null;
-		}
-		File[] listOfFiles = folder.listFiles();
-		ByteArrayOutputStream os = new ByteArrayOutputStream();
-		for (File file : listOfFiles) {
-			if (file.isFile()) {
-				Files.copy(file.toPath(), os);
-			}
-		}
-		return os.toByteArray();
-	}
-	
-	 @Override
+        FileBO fileBO = fileRepo.findByIdAndEnabledIsTrue(Long.valueOf(fileId));
+        if (fileBO == null) {
+            return null;
+        }
+
+        // FIRST: Return stored BLOB (for invoice PDFs)
+        if (fileBO.getInputstream() != null && fileBO.getInputstream().length > 0) {
+            return fileBO.getInputstream();
+        }
+
+        //  FALLBACK: Old chunk-based file reading
+        String finalPath = FileHelper.prepareChunksDir(fileBO.getPath());
+        File folder = new File(finalPath);
+
+        if (!folder.exists()) {
+            log.error("Folder does not exist - " + finalPath);
+            return null;
+        }
+
+        File[] listOfFiles = folder.listFiles();
+        ByteArrayOutputStream os = new ByteArrayOutputStream();
+
+        for (File file : listOfFiles) {
+            if (file.isFile()) {
+                Files.copy(file.toPath(), os);
+            }
+        }
+
+        return os.toByteArray();
+    }
+
+
+    @Override
 	    public List<AttachmentBO> prepareAttBOs(List<AttachmentRq> rsList, String userName) {
 
 	        if (log.isDebugEnabled()) {
@@ -297,6 +306,25 @@ public class FileServiceImpl implements FileService {
 
         // Reuse your existing uploadFile(InputStream, name, type) logic
         return uploadFile(file.getInputStream(), file.getOriginalFilename(), file.getContentType());
+    }
+
+    @Override
+    public FileBO uploadBytes(byte[] data, String filename) throws IOException {
+
+        FileBO file = new FileBO();
+
+        file.setName(filename);
+        file.setContenttype("application/pdf");
+        file.setSize(data.length);
+        file.setInputstream(data);
+        file.setEnabled(true);
+
+        // You may set path, md5, noofchunks if needed
+        file.setPath(null);
+        file.setMd5(null);
+        file.setNoofchunks(1);
+
+        return fileRepo.save(file);
     }
 
 

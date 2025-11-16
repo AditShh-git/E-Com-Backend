@@ -29,91 +29,79 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 @RestController
-@RequestMapping(value = "/api")
+@RequestMapping("/api/orders")
 @Slf4j
 @RequiredArgsConstructor
 public class OrderController {
 
+    private final OrderService orderService;
+    private final OrderRepo orderRepo;
 
-	private final OrderService orderService;
-    private final OrderRepo  orderRepo;
+    // ---------------------------------------------------------
+    // PLACE ORDER (USER)
+    // ---------------------------------------------------------
+    @PostMapping("/place")
+    public ResponseEntity<?> placeOrder(@RequestBody OrderRq rq) throws Exception {
+        return ResponseEntity.ok(orderService.placeOrder(rq));
+    }
 
-	@PostMapping("/order/save")
-	public ResponseEntity<?> saveOrder(@RequestBody OrderRq rq) throws Exception {
+    // ---------------------------------------------------------
+    // GET SINGLE ORDER
+    // ---------------------------------------------------------
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getOrder(@PathVariable long id) throws Exception {
+        return ResponseEntity.ok(orderService.retrieveOrder(id));
+    }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing RESTfulService [POST /order/save]");
-		}
-		return new ResponseEntity<>(orderService.placeOrder(rq), HttpStatus.OK);
-	}
+    // ---------------------------------------------------------
+    // GET ALL ORDERS (ADMIN)
+    // ---------------------------------------------------------
+    @GetMapping
+    public ResponseEntity<?> getAllOrders() throws Exception {
+        return ResponseEntity.ok(orderService.retrieveOrders());
+    }
 
-	@GetMapping("/order/{id}")
-	public ResponseEntity<?> retrieveCart(@PathVariable("id") long id) throws Exception {
+    // ---------------------------------------------------------
+    // UPDATE DELIVERY STATUS
+    // ---------------------------------------------------------
+    @GetMapping("/status/update")
+    public ResponseEntity<?> updateDeliveryStatus(
+            @RequestParam String orderId,
+            @RequestParam String status) throws Exception {
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing RESTfulService [GET /order/id]");
-		}
-		return new ResponseEntity<>(orderService.retrieveOrder(id), HttpStatus.OK);
-	}
+        orderService.updateDeliveryStatus(orderId, status);
+        return ResponseEntity.ok(MessageCodes.MC_UPDATED_SUCCESSFULLY);
+    }
 
-	@GetMapping("/orders")
-	public ResponseEntity<?> retrieveCartList() throws Exception {
+    // ---------------------------------------------------------
+    // GET ORDERS OF LOGGED-IN USER
+    // ---------------------------------------------------------
+    @GetMapping("/my")
+    public ResponseEntity<?> getMyOrders() throws Exception {
+        return ResponseEntity.ok(orderService.retrieveOrdersUser());
+    }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing RESTfulService [POST /orders]");
-		}
-		return new ResponseEntity<>(orderService.retrieveOrders(), HttpStatus.OK);
-	}
+    // ---------------------------------------------------------
+    // GET ALL USERS' ORDERS (ADMIN)
+    // ---------------------------------------------------------
+    @GetMapping("/all-users")
+    public ResponseEntity<?> getAllUsersOrders() throws Exception {
+        return ResponseEntity.ok(orderService.retrieveAllOrders());
+    }
 
-	@GetMapping("/orders/status/update")
-	public ResponseEntity<?> updateDeliveryStatus(@RequestParam("orderId") String orderId,
-			@RequestParam("status") String status) throws Exception {
+    // ---------------------------------------------------------
+    // CANCEL ORDER (USER)
+    // ---------------------------------------------------------
+    @DeleteMapping("/cancel/{orderId}")
+    public ResponseEntity<?> cancelOrder(@PathVariable String orderId) throws Exception {
+        return ResponseEntity.ok(orderService.retrieveOrdersCancel(orderId));
+    }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing RESTfulService [GET /orders] - updateDeliveryStatus");
-		}
-
-		// Call a method to update delivery status, assuming it returns updated order or
-		// success message
-		orderService.updateDeliveryStatus(orderId, status);
-		return new ResponseEntity<>(MessageCodes.MC_UPDATED_SUCCESSFULLY, HttpStatus.OK);
-	}
-
-	@GetMapping("/orders/user")
-	public ResponseEntity<?> orderUsers() throws Exception {
-
-		if (log.isDebugEnabled()) {
-			log.debug("Executing RESTfulService [GET /orders/user] - orderUsers");
-		}
-
-		// Call a method to update delivery status, assuming it returns updated order or
-		// success message
-		return new ResponseEntity<>(orderService.retrieveOrdersUser(), HttpStatus.OK);
-	}
-
-	@GetMapping("/orders/all/users")
-	public ResponseEntity<?> retrieveAllUsersOrder() throws Exception {
-
-		if (log.isDebugEnabled()) {
-			log.debug("Executing RESTfulService [POST /orders]");
-		}
-		return new ResponseEntity<>(orderService.retrieveAllOrders(), HttpStatus.OK);
-	}
-
-	@DeleteMapping("/orders/cancel/{orderId}")
-	public ResponseEntity<?> orderCancel(@PathVariable("orderId") String orderId) throws Exception {
-
-		if (log.isDebugEnabled()) {
-			log.debug("Executing RESTfulService [DELETE /orders/cancel] - orderCancel");
-		}
-
-		// Call a method to update delivery status, assuming it returns updated order or
-		// success message
-		return new ResponseEntity<>(orderService.retrieveOrdersCancel(orderId), HttpStatus.OK);
-	}
-
+    // ---------------------------------------------------------
+    // DOWNLOAD INVOICE (SECURED)
+    // ---------------------------------------------------------
     @GetMapping("/invoice/{fileName:.+}")
-    public ResponseEntity<?> getInvoiceFile(@PathVariable String fileName) {
+    public ResponseEntity<?> downloadInvoice(@PathVariable String fileName) {
         try {
             Long loggedInUserId = LoggedUserContext.getLoggedUserId();
             String role = LoggedUserContext.getLoggedUserRole();
@@ -123,26 +111,27 @@ public class OrderController {
                         .body("Unauthorized access");
             }
 
-            // Allow only safe names
+            // Validate filename
             if (!fileName.matches("[A-Za-z0-9._-]+\\.pdf")) {
                 return ResponseEntity.badRequest().body("Invalid filename");
             }
 
             // Extract invoice number
             String invoiceNo = fileName.replace(".pdf", "");
-
             OrderBO order = orderRepo.findByInvoiceno(invoiceNo);
+
             if (order == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body("Invoice not found");
             }
 
-            // ==============================
-            // Authorization
-            // ==============================
+            // ----------------------------------------------------
+            // AUTHORIZATION
+            // ----------------------------------------------------
             boolean allowed = false;
 
             switch (role.toUpperCase()) {
+
                 case "USER":
                     allowed = order.getUser() != null
                             && order.getUser().getId().equals(loggedInUserId);
@@ -150,8 +139,11 @@ public class OrderController {
 
                 case "SELLER":
                 case "VENDOR":
-                    allowed = order.getCartempids() != null
-                            && order.getCartempids().contains(loggedInUserId);
+                    // Seller/Vendor is allowed only if THEIR product was sold
+                    allowed = order.getCartItems().stream()
+                            .anyMatch(c -> c.getProduct() != null
+                                    && c.getProduct().getSeller() != null
+                                    && c.getProduct().getSeller().getId().equals(loggedInUserId));
                     break;
 
                 case "ADMIN":
@@ -164,19 +156,15 @@ public class OrderController {
                         .body("You do not have permission to download this invoice");
             }
 
-            // ==============================
-            // Locate file
-            // ==============================
+            // ----------------------------------------------------
+            // FETCH PDF FILE
+            // ----------------------------------------------------
             Path base = Paths.get(System.getProperty("user.dir"),
                     "uploads", "downloads", "invoices");
 
             Path filePath = base.resolve(fileName).normalize();
 
-            if (!filePath.startsWith(base)) {
-                return ResponseEntity.badRequest().body("Invalid path");
-            }
-
-            if (!Files.exists(filePath)) {
+            if (!filePath.startsWith(base) || !Files.exists(filePath)) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body("Invoice file missing");
             }

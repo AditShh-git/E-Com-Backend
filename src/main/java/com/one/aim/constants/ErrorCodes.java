@@ -64,6 +64,8 @@ public class ErrorCodes {
     public static final String EC_USERROLE_NOT_FOUND        = "EC_USERROLE_NOT_FOUND";
     public static final String EC_INVALID_USERROLE          = "EC_INVALID_USERROLE";
     public static final String EC_REQUIRED_AUTHORIZATION_ID = "EC_REQUIRED_AUTHORIZATION_ID";
+    public static final String EC_LOGIN_REQUIRED = "EC_LOGIN_REQUIRED";
+
 
     // ============================================================
     // EMAIL ERRORS

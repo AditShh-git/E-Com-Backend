@@ -17,9 +17,16 @@ public interface OrderRepo extends JpaRepository<OrderBO, Long> {
 	List<OrderBO> findByUser_Id(Long userId);
 	
 	OrderBO findByRazorpayorderid(String razorpayorderid);
-	
-	@Query("SELECT o FROM OrderBO o JOIN o.cartempids c WHERE c = :userId")
-    List<OrderBO> findByCartempid(@Param("userId") Long userId);
+
+    @Query("""
+    SELECT o FROM OrderBO o
+    JOIN o.cartItems c
+    JOIN c.product p
+    JOIN p.seller s
+    WHERE s.id = :sellerId
+""")
+    List<OrderBO> findOrdersBySellerId(@Param("sellerId") Long sellerId);
+
 
     OrderBO findByInvoiceno(String invoiceno);
 

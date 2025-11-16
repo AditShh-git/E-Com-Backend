@@ -1,14 +1,15 @@
 package com.one.aim.service.impl;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import com.one.aim.bo.*;
 import com.one.aim.repo.*;
+import com.one.aim.rs.OrderIdRs;
 import com.one.aim.service.AdminSettingService;
+import com.one.aim.service.InvoiceService;
+import com.one.vm.core.BaseDataRs;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -35,302 +36,201 @@ import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 
 import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CartServiceImpl implements CartService {
 
     private final CartRepo cartRepo;
+    private final AddressRepo  addressRepo;
+    private final OrderRepo orderRepo;
     private final UserRepo userRepo;
-    private final AdminRepo adminRepo;
-    private final SellerRepo sellerRepo;
-    private final VendorRepo vendorRepo;
     private final ProductRepo productRepo;
-    private final FileService fileService;
-    private final AdminSettingService adminSettingService;
+    private final InvoiceService  invoiceService;
+    private final FileService fileService;   // REQUIRED for CartMapper
 
-    // Save / create a cart (admin/seller/vendor)
-    @Override
-    public BaseRs saveCart(CartRq rq) throws Exception {
-        log.debug("Executing saveCart() ->");
-
-        AdminBO adminBO = adminRepo.findByIdAndFullName(AuthUtils.findLoggedInUser().getDocId(),
-                AuthUtils.findLoggedInUser().getFullName());
-        SellerBO sellerBO = sellerRepo.findByIdAndFullName(AuthUtils.findLoggedInUser().getDocId(),
-                AuthUtils.findLoggedInUser().getFullName());
-        VendorBO vendorBO = vendorRepo.findByIdAndFullName(AuthUtils.findLoggedInUser().getDocId(),
-                AuthUtils.findLoggedInUser().getFullName());
-
-        if (adminBO == null && sellerBO == null && vendorBO == null) {
-            log.error(ErrorCodes.EC_UNAUTHORIZED_ACCESS);
-            return ResponseUtils.failure(ErrorCodes.EC_UNAUTHORIZED_ACCESS);
-        }
-
-        String docId = Utils.getValidString(rq.getDocId());
-        String message;
-        CartBO cartBO;
-
-        if (Utils.isNotEmpty(docId)) {
-            Optional<CartBO> optCartBO = cartRepo.findById(Long.parseLong(docId));
-            if (optCartBO.isEmpty()) {
-                return ResponseUtils.failure(ErrorCodes.EC_CART_NOT_FOUND);
-            }
-            cartBO = optCartBO.get();
-
-            boolean verified = Boolean.parseBoolean(rq.getIsVarified());
-            adminBO = adminRepo.findByIdAndFullName(AuthUtils.findLoggedInUser().getDocId(),
-                    AuthUtils.findLoggedInUser().getFullName());
-            if (adminBO == null && verified) {
-                return ResponseUtils.failure(ErrorCodes.EC_UNAUTHORIZED_ACCESS);
-            }
-            cartBO.setVarified(verified);
-            message = MessageCodes.MC_UPDATED_SUCCESSFUL;
-        } else {
-            cartBO = new CartBO();
-            message = MessageCodes.MC_SAVED_SUCCESSFUL;
-            cartBO.setCartempid(AuthUtils.findLoggedInUser().getDocId());
-            cartBO.setCartempname(AuthUtils.findLoggedInUser().getFullName());
-        }
-
-        String pName = Utils.getValidString(rq.getPName());
-        if (!pName.equals(Utils.getValidString(cartBO.getPname()))) {
-            cartBO.setPname(pName);
-        }
-
-        String description = Utils.getValidString(rq.getDescription());
-        if (!description.equals(cartBO.getDescription())) {
-            cartBO.setDescription(description);
-        }
-
-        cartBO.setTotalitem(rq.getTotalItem());
-        cartBO.setCategory(Utils.getValidString(rq.getCategory()));
-
-        if (rq.getImage() != null) {
-            cartBO.setImage(rq.getImage());
-        }
-
-        cartBO.setPrice(rq.getPrice());
-        cartBO.setOffer(rq.getOffer());
-        cartBO.setEnabled(rq.isEnabled());
-
-        cartRepo.save(cartBO);
-
-        CartRs cartRs = CartMapper.mapToCartRs(cartBO,
-                adminSettingService.getGlobalDiscount(), adminSettingService.isDiscountEngineEnabled());
-
-        return ResponseUtils.success(new CartDataRs(message, cartRs));
-    }
-
-    // Add product(s) to logged-in user's cart (cartIds are product IDs or cart IDs)
+    // ==========================================================
+    // ADD PRODUCT TO CART  (Flipkart Style)
+    // ==========================================================
     @Override
     @Transactional
-    public BaseRs addToCart(String cartIds) throws Exception {
-        log.debug("Executing addToCart() ->");
+    public BaseRs addProductToCart(Long productId) throws Exception {
 
         Long userId = AuthUtils.findLoggedInUser().getDocId();
+
         UserBO user = userRepo.findById(userId)
-                .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_USER_NOT_FOUND));
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        List<Long> ids = Arrays.stream(cartIds.split(","))
-                .map(Long::parseLong)
-                .collect(Collectors.toList());
+        ProductBO product = productRepo.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
 
-        List<CartBO> responseList = new ArrayList<>();
+        // Check if already added
+        CartBO existing = cartRepo.findAllByUserAddToCart_Id(userId).stream()
+                .filter(c -> c.getProduct().getId().equals(productId))
+                .findFirst()
+                .orElse(null);
 
-        for (Long id : ids) {
+        if (existing != null) {
+            existing.setQuantity(existing.getQuantity() + 1);
+            cartRepo.save(existing);
 
-            CartBO cart = cartRepo.findById(id).orElse(null);
-
-            if (cart == null) {
-                ProductBO product = productRepo.findById(id)
-                        .orElseThrow(() -> new RuntimeException("Product not found with ID: " + id));
-
-                cart = new CartBO();
-                cart.setPname(product.getName());
-                cart.setDescription(product.getDescription());
-                cart.setPrice(product.getPrice() == null ? 0L : product.getPrice().longValue());
-                cart.setCategory(product.getCategoryName());
-                cart.setVarified(true);
-                cart.setEnabled(true);
-                cart.setTotalitem(product.getStock() == null ? 0 : product.getStock());
-                cart.setOffer(0);
-
-                if (product.getSeller() != null) {
-                    cart.setCartempid(product.getSeller().getId());
-                    cart.setCartempname(product.getSeller().getFullName());
-                }
-
-                cartRepo.save(cart);
-            }
-
-            final CartBO cartItem = cart;
-
-            Optional<CartBO> existing = user.getAddtoCart().stream()
-                    .filter(c -> c.getId().equals(cartItem.getId()))
-                    .findFirst();
-
-            if (existing.isPresent()) {
-                CartBO existingCart = existing.get();
-                existingCart.setQuantity(existingCart.getQuantity() + 1);
-                responseList.add(existingCart);
-            } else {
-                cart.setQuantity(1);
-                cart.setUserAddToCart(user);
-                user.getAddtoCart().add(cart);
-                responseList.add(cart);
-            }
+            return ResponseUtils.success(
+                    new CartDataRs("Quantity updated",
+                            CartMapper.mapToCartRs(existing, fileService))
+            );
         }
 
-        userRepo.save(user);
+        // New cart entry
+        CartBO cart = new CartBO();
+        cart.setUserAddToCart(user);
+        cart.setProduct(product);
+        cart.setPname(product.getName());
+        cart.setPrice(product.getPrice() == null ? 0L : product.getPrice().longValue());
+        cart.setQuantity(1);
+        cart.setEnabled(true);
+        cart.setSellerId(product.getSeller().getId());
 
-        List<CartRs> rsList = CartMapper.mapToCartMinRsList(responseList,
-                adminSettingService.getGlobalDiscount(), adminSettingService.isDiscountEngineEnabled());
+        cartRepo.save(cart);
 
-        return ResponseUtils.success(new CartDataRsList(MessageCodes.MC_SAVED_SUCCESSFUL, rsList));
+        return ResponseUtils.success(
+                new CartDataRs("Added to cart",
+                        CartMapper.mapToCartRs(cart, fileService))
+        );
     }
 
-    // Retrieve verified carts (public) — apply discount for response
+    // ==========================================================
+    // UPDATE QUANTITY
+    // ==========================================================
     @Override
-    public BaseRs retrieveCarts(int limit, int offset) throws Exception {
-        log.debug("Executing retrieveCarts() ->");
-
-        int page = Math.max(0, offset / Math.max(1, limit));
-        PageRequest pageRequest = PageRequest.of(page, limit);
-        Page<CartBO> cartPage = cartRepo.findAllByVarifiedIsTrue(pageRequest);
-
-        List<CartRs> rslist = CartMapper.mapToCartMinRsList(cartPage.getContent(),
-                adminSettingService.getGlobalDiscount(), adminSettingService.isDiscountEngineEnabled());
-
-        return ResponseUtils.success(new CartDataRsList(MessageCodes.MC_RETRIEVED_SUCCESSFUL, rslist));
-    }
-
     @Transactional
-    @Override
-    public BaseRs retrieveAddToCarts() throws Exception {
-        log.debug("Executing retrieveAddToCarts() ->");
+    public BaseRs updateQuantity(Long cartId, int quantity) throws Exception {
 
-        UserBO userBO = userRepo.findById(AuthUtils.findLoggedInUser().getDocId())
-                .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_USER_NOT_FOUND));
+        if (quantity < 1)
+            return ResponseUtils.failure("INVALID_QTY", "Quantity must be >= 1");
 
-        List<CartBO> cartBOs = userBO.getAddtoCart();
+        Long userId = AuthUtils.findLoggedInUser().getDocId();
 
-        List<CartRs> rsList = CartMapper.mapToCartMinRsList(cartBOs,
-                adminSettingService.getGlobalDiscount(), adminSettingService.isDiscountEngineEnabled());
+        CartBO cart = cartRepo.findById(cartId)
+                .orElseThrow(() -> new RuntimeException("Cart not found"));
 
-        return ResponseUtils.success(new CartDataRsList(MessageCodes.MC_RETRIEVED_SUCCESSFUL, rsList));
+        if (!cart.getUserAddToCart().getId().equals(userId)) {
+            return ResponseUtils.failure("NOT_ALLOWED", "You cannot update others cart");
+        }
+
+        cart.setQuantity(quantity);
+        cartRepo.save(cart);
+
+        return ResponseUtils.success(
+                new CartDataRs("Quantity updated",
+                        CartMapper.mapToCartRs(cart, fileService))
+        );
     }
 
+    // ==========================================================
+    // REMOVE CART ITEM
+    // ==========================================================
     @Override
-    public BaseRs retrieveCartsByCategory(String category) {
-        log.debug("Executing retrieveCartsByCategory() ->");
+    @Transactional
+    public BaseRs removeFromCart(Long cartId) throws Exception {
 
-        List<CartBO> bos = cartRepo.findAllByCategoryAndVarifiedIsTrue(category);
-        List<CartRs> rslist = CartMapper.mapToCartMinRsList(bos,
-                adminSettingService.getGlobalDiscount(), adminSettingService.isDiscountEngineEnabled());
+        Long userId = AuthUtils.findLoggedInUser().getDocId();
 
-        return ResponseUtils.success(new CartDataRsList(MessageCodes.MC_RETRIEVED_SUCCESSFUL, rslist));
+        CartBO cart = cartRepo.findById(cartId)
+                .orElseThrow(() -> new RuntimeException("Cart not found"));
+
+        if (!cart.getUserAddToCart().getId().equals(userId)) {
+            return ResponseUtils.failure("NOT_ALLOWED", "You cannot remove others cart");
+        }
+
+        cartRepo.delete(cart);
+
+        return ResponseUtils.success("Removed from cart");
     }
 
+    // ==========================================================
+    // LIST USER CART
+    // ==========================================================
     @Override
-    public BaseRs retrieveCart(String id) {
-        log.debug("Executing retrieveCart(id) ->");
+    public BaseRs getMyCart() throws Exception {
 
-        Optional<CartBO> optBo = cartRepo.findById(Long.valueOf(id));
-        CartBO cartBO = optBo.orElse(null);
+        Long userId = AuthUtils.findLoggedInUser().getDocId();
 
-        CartRs rs = CartMapper.mapToCartMinRs(cartBO,
-                adminSettingService.getGlobalDiscount(), adminSettingService.isDiscountEngineEnabled());
-        return ResponseUtils.success(new CartDataRs(MessageCodes.MC_RETRIEVED_SUCCESSFUL, rs));
+        List<CartBO> cartList = cartRepo.findAllByUserAddToCart_Id(userId);
+
+        return ResponseUtils.success(
+                new CartDataRsList("Cart loaded",
+                        CartMapper.mapToCartRsList(cartList, fileService))
+        );
     }
 
+    // ==========================================================
+// PLACE ORDER
+// ==========================================================
     @Override
-    public BaseRs retrieveCartByEmpType() {
-        log.debug("Executing retrieveCartByEmpType() ->");
+    @Transactional
+    public BaseRs placeOrder() throws Exception {
 
-        List<CartBO> cartBOs = cartRepo.findAllByCartempidAndCartempname(
-                AuthUtils.findLoggedInUser().getDocId(),
-                AuthUtils.findLoggedInUser().getFullName()
+        Long userId = AuthUtils.findLoggedInUser().getDocId();
+
+        // ---- Fetch cart of current user ----
+        List<CartBO> cartList = cartRepo.findAllByUserAddToCart_Id(userId);
+
+        if (cartList.isEmpty())
+            return ResponseUtils.failure("EMPTY_CART", "Your cart is empty");
+
+        // ---- Compute total amount ----
+        long totalAmount = cartList.stream()
+                .mapToLong(c -> c.getPrice() * c.getQuantity())
+                .sum();
+
+        // ---- Fetch shipping address ----
+        AddressBO address = addressRepo.findByUserid(userId)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("No shipping address found for user"));
+
+        UserBO user = userRepo.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // ---- Create Order ----
+        OrderBO order = new OrderBO();
+        order.setUser(user);
+        order.setShippingAddress(address);    // <---- THIS FIXES address_id null
+        order.setOrderTime(LocalDateTime.now());
+        order.setOrderStatus("PLACED");
+        order.setPaymentMethod("CASH_ON_DELIVERY");
+        order.setTotalAmount(totalAmount);
+        order.setInvoiceno("INV-" + System.currentTimeMillis());
+
+        // ---- Attach CartBO items correctly ----
+        for (CartBO cart : cartList) {
+
+            cart.setUserAddToCart(null);      // remove user link
+
+            cartRepo.save(cart);              // <---- IMPORTANT
+            // avoids: TransientObjectException
+            // makes CartBO "persistent" again
+
+            order.getCartItems().add(cart);   // add to order
+        }
+
+        // ---- Save Order ----
+        OrderBO savedOrder = orderRepo.save(order);
+
+        // ---- Generate Invoice ----
+        invoiceService.generateInvoice(savedOrder.getId());
+
+        // ---- Clear user's cart ----
+        // IMPORTANT: do NOT delete carts now because they belong to order
+        // only delete "user_addcart_id" relation
+        // already removed above, so nothing more required
+
+        return ResponseUtils.success(
+                new BaseDataRs("Order placed successfully!", new OrderIdRs(savedOrder.getId()))
         );
 
-        if (Utils.isEmpty(cartBOs)) {
-            return ResponseUtils.success(new CartDataRs(MessageCodes.MC_NO_RECORDS_FOUND));
-        }
 
-        List<CartRs> rsList = CartMapper.mapToCartRsList(cartBOs,
-                adminSettingService.getGlobalDiscount(), adminSettingService.isDiscountEngineEnabled());
-
-        return ResponseUtils.success(new CartDataRsList(MessageCodes.MC_RETRIEVED_SUCCESSFUL, rsList));
     }
 
-    @Override
-    public BaseRs retrieveCartsByAdmin() {
-        log.debug("Executing retrieveCartsByAdmin() ->");
 
-        Optional<AdminBO> optAdmin = adminRepo.findById(AuthUtils.findLoggedInUser().getDocId());
-        if (optAdmin.isEmpty()) {
-            return ResponseUtils.failure(ErrorCodes.EC_UNAUTHORIZED_ACCESS);
-        }
-
-        List<CartBO> cartBOs = cartRepo.findAll();
-        if (Utils.isEmpty(cartBOs)) {
-            return ResponseUtils.success(new CartDataRs(MessageCodes.MC_NO_RECORDS_FOUND));
-        }
-
-        List<SellerBO> sellerBOs = new ArrayList<>();
-        List<VendorBO> vendorBOs = new ArrayList<>();
-
-        for (CartBO cartBO : cartBOs) {
-            Long cartEmpId = cartBO.getCartempid();
-            String cartEmpName = cartBO.getCartempname();
-
-            SellerBO sellerBO = sellerRepo.findByIdAndFullName(cartEmpId, cartEmpName);
-            VendorBO vendorBO = vendorRepo.findByIdAndFullName(cartEmpId, cartEmpName);
-
-            sellerBOs.add(sellerBO);
-            vendorBOs.add(vendorBO);
-        }
-
-        List<CartMaxRs> rsList = CartMapper.mapToCartAdminRsList(cartBOs, sellerBOs, vendorBOs,
-                adminSettingService.getGlobalDiscount(), adminSettingService.isDiscountEngineEnabled());
-
-        return ResponseUtils.success(new CartMaxDataRsList(MessageCodes.MC_RETRIEVED_SUCCESSFUL, rsList));
-    }
-
-    @Override
-    public BaseRs searchCartsByPname(String pname, int offset, int limit) {
-        log.debug("Executing searchCartsByPname() ->");
-
-        Pageable pageable = PageRequest.of(Math.max(0, offset / Math.max(1, limit)), limit);
-        Page<CartBO> cartPage = cartRepo.findByPnameContainingIgnoreCase(pname, pageable);
-
-        List<CartRs> rslist = CartMapper.mapToCartMinRsList(cartPage.getContent(),
-                adminSettingService.getGlobalDiscount(), adminSettingService.isDiscountEngineEnabled());
-
-        String message = Utils.isEmpty(rslist) ? MessageCodes.MC_NO_RECORDS_FOUND : MessageCodes.MC_RETRIEVED_SUCCESSFUL;
-        return ResponseUtils.success(new CartDataRsList(message, rslist));
-    }
-
-    @Override
-    public BaseRs deleteCart(String id) throws Exception {
-        log.debug("Executing deleteCart(id) ->");
-
-        CartBO cartBO = cartRepo.findById(Long.valueOf(id))
-                .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_CART_NOT_FOUND));
-
-        Long loggedId = AuthUtils.findLoggedInUser().getDocId();
-        String fullName = AuthUtils.findLoggedInUser().getFullName();
-
-        boolean isAdmin = adminRepo.findByIdAndFullName(loggedId, fullName) != null;
-        boolean isSeller = sellerRepo.findByIdAndFullName(loggedId, fullName) != null;
-        boolean isVendor = vendorRepo.findByIdAndFullName(loggedId, fullName) != null;
-
-        if (!isAdmin && !isSeller && !isVendor) {
-            return ResponseUtils.failure(ErrorCodes.EC_ACCESS_DENIED);
-        }
-
-        cartRepo.delete(cartBO);
-
-        return ResponseUtils.success(new CartDataRs(MessageCodes.MC_DELETED_SUCCESSFUL));
-    }
 }

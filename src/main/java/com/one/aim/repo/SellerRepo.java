@@ -11,11 +11,16 @@ import com.one.aim.bo.SellerBO;
 @Repository
 public interface SellerRepo extends JpaRepository<SellerBO, Long> {
 
+
+    // ADD THIS (minimal change)
+    Optional<SellerBO> findByResetToken(String resetToken);
+
+
     //  Find by full name
     Optional<SellerBO> findByFullName(String fullName);
 
+    //  Find by email (case-insensitive)
     Optional<SellerBO> findByEmailIgnoreCase(String email);
-
 
     //  Find by email (used for login)
     Optional<SellerBO> findByEmail(String email);
@@ -29,4 +34,6 @@ public interface SellerRepo extends JpaRepository<SellerBO, Long> {
     //  Keep this for list retrievals
     List<SellerBO> findAllByIdIn(List<Long> ids);
 
+    //  Find seller by email verification token
+    Optional<SellerBO> findByVerificationToken(String token);
 }

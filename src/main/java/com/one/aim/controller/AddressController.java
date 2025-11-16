@@ -19,61 +19,44 @@ import com.one.vm.utils.ResponseUtils;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
-@RequestMapping(value = "/api")
+@RequestMapping("/api/address")
 @Slf4j
 public class AddressController {
 
-	@Autowired
-	private AddressService addressService;
+    @Autowired
+    private AddressService addressService;
 
-	@PostMapping("/adddress/save")
-	public ResponseEntity<?> saveCart(@RequestBody AddressRq rq) throws Exception {
+    // =========================
+    // ADD ADDRESS
+    // =========================
+    @PostMapping("/save")
+    public ResponseEntity<?> saveAddress(@RequestBody AddressRq rq) throws Exception {
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing RESTfulService [POST /user]");
-		}
-		return new ResponseEntity<>(addressService.saveAddress(rq), HttpStatus.OK);
-	}
-	
-	
-	
-	
-//	@GetMapping("/{id}")
-//	public ResponseEntity<AddressBO> getAddressById(@PathVariable Long id) {
-//	    try {
-//	        if (log.isDebugEnabled()) {
-//	            log.debug("Executing getAddressById(id={}) ->", id);
-//	        }
-//
-//	        AddressBO address = addressService.getAddressById(id);
-//	        return new ResponseEntity<>(address, HttpStatus.OK);
-//
-//	    } catch (Exception e) {
-//	        log.error("Error fetching address by ID: {}", id, e);
-//	        return new ResponseEntity<>(null, HttpStatus.NOT_FOUND);
-//	    }
-//	}
-	
-	
+        if (log.isDebugEnabled()) {
+            log.debug("Executing RESTfulService [POST /address/save]");
+        }
 
-	
-	
-	
-	@GetMapping("/me")
-	public ResponseEntity<BaseRs> getMyAddress() {
-	    try {
-	        if (log.isDebugEnabled()) {
-	            log.debug("Executing getMyAddress ->");
-	        }
+        return new ResponseEntity<>(addressService.saveAddress(rq), HttpStatus.OK);
+    }
 
-	        BaseRs response = addressService.getAddressOfLoggedInUser();
-	        return new ResponseEntity<>(response, HttpStatus.OK);
+    // =========================
+    // GET LOGGED-IN USER ADDRESS
+    // =========================
+    @GetMapping("/me")
+    public ResponseEntity<BaseRs> getMyAddress() {
 
-	    } catch (Exception e) {
-	        log.error("Error fetching logged-in user address", e);
-	        return new ResponseEntity<>(ResponseUtils.failure("Internal server error"), HttpStatus.INTERNAL_SERVER_ERROR);
-	    }
-	}
+        try {
+            if (log.isDebugEnabled()) {
+                log.debug("Executing getMyAddress()");
+            }
 
-	
+            BaseRs response = addressService.getAddressOfLoggedInUser();
+            return new ResponseEntity<>(response, HttpStatus.OK);
+
+        } catch (Exception e) {
+            log.error("Error fetching logged-in user address", e);
+            return new ResponseEntity<>(ResponseUtils.failure("Internal server error"),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 }

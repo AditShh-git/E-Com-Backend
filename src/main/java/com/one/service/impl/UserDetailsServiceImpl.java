@@ -3,6 +3,7 @@ package com.one.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -19,6 +20,8 @@ import com.one.aim.repo.SellerRepo;
 import com.one.aim.repo.UserRepo;
 import com.one.aim.repo.VendorRepo;
 
+import java.util.List;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -32,56 +35,68 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        log.debug(" Attempting authentication for email: {}", email);
 
-        //  Check each repository (email-based login only)
-        UserBO user = userRepo.findByEmail(email).orElse(null);
+        log.debug("Attempting authentication for email: {}", email);
+
+        // 1. ADMIN
         AdminBO admin = adminRepo.findByEmail(email).orElse(null);
-        SellerBO seller = sellerRepo.findByEmail(email).orElse(null);
-        VendorBO vendor = vendorRepo.findByEmail(email).orElse(null);
-        DeliveryPersonBO delivery = deliveryPersonRepo.findByEmail(email).orElse(null);
-
-        if (user == null && admin == null && seller == null && vendor == null && delivery == null) {
-            log.error(" User not found with email: {}", email);
-            throw new UsernameNotFoundException("User not found with email: " + email);
-        }
-
-        //  Normalize to a unified user object
-        UserBO unifiedUser = new UserBO();
-
         if (admin != null) {
-            unifiedUser.setId(admin.getId());
-            unifiedUser.setFullName(admin.getFullName());
-            unifiedUser.setEmail(admin.getEmail());
-            unifiedUser.setPassword(admin.getPassword());
-            unifiedUser.setRole("ADMIN");
-        } else if (seller != null) {
-            unifiedUser.setId(seller.getId());
-            unifiedUser.setFullName(seller.getFullName());
-            unifiedUser.setEmail(seller.getEmail());
-            unifiedUser.setPassword(seller.getPassword());
-            unifiedUser.setRole("SELLER");
-        } else if (vendor != null) {
-            unifiedUser.setId(vendor.getId());
-            unifiedUser.setFullName(vendor.getFullName());
-            unifiedUser.setEmail(vendor.getEmail());
-            unifiedUser.setPassword(vendor.getPassword());
-            unifiedUser.setRole("VENDOR");
-        } else if (delivery != null) {
-            unifiedUser.setId(delivery.getId());
-            unifiedUser.setFullName(delivery.getFullName());
-            unifiedUser.setEmail(delivery.getEmail());
-            unifiedUser.setPassword(delivery.getPassword());
-            unifiedUser.setRole("DELIVERY_PERSON");
-        } else if (user != null) {
-            unifiedUser.setId(user.getId());
-            unifiedUser.setFullName(user.getFullName());
-            unifiedUser.setEmail(user.getEmail());
-            unifiedUser.setPassword(user.getPassword());
-            unifiedUser.setRole("USER");
+            log.info("Authenticated [ADMIN] ({})", admin.getEmail());
+            return new UserDetailsImpl(
+                    admin.getId(),
+                    admin.getEmail(),
+                    admin.getFullName(),
+                    admin.getPassword(),
+                    true,       // emailVerified always true for admin
+                    true,       // accountVerified always true
+                    List.of(new SimpleGrantedAuthority("ADMIN"))
+            );
         }
 
-        log.info(" Authenticated [{}] ({})", unifiedUser.getRole(), unifiedUser.getEmail());
-        return UserDetailsImpl.build(unifiedUser);
+        // 2. SELLER
+        SellerBO seller = sellerRepo.findByEmail(email).orElse(null);
+        if (seller != null) {
+            log.info("Authenticated [SELLER] ({})", seller.getEmail());
+            return UserDetailsImpl.build(seller);
+        }
+
+        // 3. USER
+        UserBO user = userRepo.findByEmail(email).orElse(null);
+        if (user != null) {
+            log.info("Authenticated [USER] ({})", user.getEmail());
+            return UserDetailsImpl.build(user);
+        }
+
+        // 4. VENDOR
+        VendorBO vendor = vendorRepo.findByEmail(email).orElse(null);
+        if (vendor != null) {
+            log.info("Authenticated [VENDOR] ({})", vendor.getEmail());
+            return new UserDetailsImpl(
+                    vendor.getId(),
+                    vendor.getEmail(),
+                    vendor.getFullName(),
+                    vendor.getPassword(),
+                    true,
+                    true,
+                    List.of(new SimpleGrantedAuthority("VENDOR"))
+            );
+        }
+
+        // 5. DELIVERY PERSON
+        DeliveryPersonBO delivery = deliveryPersonRepo.findByEmail(email).orElse(null);
+        if (delivery != null) {
+            log.info("Authenticated [DELIVERY_PERSON] ({})", delivery.getEmail());
+            return new UserDetailsImpl(
+                    delivery.getId(),
+                    delivery.getEmail(),
+                    delivery.getFullName(),
+                    delivery.getPassword(),
+                    true,
+                    true,
+                    List.of(new SimpleGrantedAuthority("DELIVERY_PERSON"))
+            );
+        }
+
+        throw new UsernameNotFoundException("User not found with email: " + email);
     }
 }

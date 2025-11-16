@@ -13,19 +13,19 @@ import lombok.Setter;
 @NoArgsConstructor
 public class OrderRq extends BaseVM {
 
-	private static final long serialVersionUID = 1L;
-	//private Long userId;
-	private String paymentMethod;
-	
-	// <CartId, cartCount>
-	Map<String,Integer> totalCarts;
+    private static final long serialVersionUID = 1L;
 
-	private String fullName;
-	private String street;
-	private String city;
-	private String state;
-	private String zip;
-	private String country;
-	private String phone;
+    private String paymentMethod;   // COD / UPI / CARD / NETBANKING
 
+    // CartId → quantity
+    private Map<String, Integer> totalCarts;
+
+    // Shipping address
+    private String fullName;
+    private String street;
+    private String city;
+    private String state;
+    private String zip;
+    private String country;
+    private String phone;
 }

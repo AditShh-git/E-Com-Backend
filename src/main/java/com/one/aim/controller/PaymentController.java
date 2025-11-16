@@ -122,30 +122,36 @@ public class PaymentController {
 //		return Base64.getEncoder().encodeToString(hash);
 //	}
 
-	@GetMapping("auth/getPaymentStatus")
-	public ResponseEntity<?> getPaymentStatus(@RequestParam String razorpayOrderId) {
-		try {
-			RazorpayClient razorpay = new RazorpayClient("rzp_live_vegmIuWT1fULsb", "B9CD2cf5PLjKDgQdqwYUrjxm");
+    @GetMapping("auth/getPaymentStatus")
+    public ResponseEntity<?> getPaymentStatus(@RequestParam String razorpayOrderId) {
+        try {
+            RazorpayClient razorpay = new RazorpayClient("rzp_live_vegmIuWT1fULsb", "B9CD2cf5PLjKDgQdqwYUrjxm");
 
-			// Fetch all payments for this order
-			JSONObject paymentsResponse = (JSONObject) razorpay.orders.fetchPayments(razorpayOrderId);
+            JSONObject paymentsResponse = (JSONObject) razorpay.orders.fetchPayments(razorpayOrderId);
 
-			JSONArray items = paymentsResponse.getJSONArray("items");
+            JSONArray items = paymentsResponse.getJSONArray("items");
 
-			if (items.isEmpty()) {
-				return ResponseEntity.ok("No payments found for this order.");
-			}
+            if (items.isEmpty()) {
+                return ResponseEntity.ok("No payments found for this order.");
+            }
 
-			JSONObject payment = items.getJSONObject(0); // Take first payment
-			String status = payment.getString("status");
-			OrderBO orderBO = orderRepo.findByRazorpayorderid(razorpayOrderId);
-			orderBO.setPaymentstatus(status);
-			orderRepo.save(orderBO);
-			return ResponseEntity.ok(status);
-		} catch (Exception e) {
-			e.printStackTrace();
-			return ResponseEntity.status(500).body("Error fetching payment status: " + e.getMessage());
-		}
-	}
+            JSONObject payment = items.getJSONObject(0);
+            String status = payment.getString("status");
+
+            OrderBO orderBO = orderRepo.findByRazorpayorderid(razorpayOrderId);
+
+
+            orderBO.setPaymentStatus(status);
+
+            orderRepo.save(orderBO);
+
+            return ResponseEntity.ok(status);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body("Error fetching payment status: " + e.getMessage());
+        }
+    }
+
 
 }

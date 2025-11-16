@@ -5,6 +5,7 @@ import com.one.aim.bo.SellerBO;
 import com.one.aim.repo.AdminSettingsRepo;
 import com.one.aim.repo.SellerRepo;
 import com.one.aim.service.AdminSettingService;
+import com.one.aim.service.EmailService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ public class AdminSettingServiceImpl implements AdminSettingService {
 
     private final AdminSettingsRepo repo;
     private final SellerRepo sellerRepo;
+    private final EmailService  emailService;
 
     @PostConstruct
     public void init() {
@@ -86,11 +88,36 @@ public class AdminSettingServiceImpl implements AdminSettingService {
         SellerBO seller = sellerRepo.findById(sellerId)
                 .orElseThrow(() -> new RuntimeException("Seller not found"));
 
-        seller.setVerified(status);
+        // =============== ADMIN APPROVES SELLER ===============
+        if (status) {
+
+            // If seller was NOT verified before, and now admin approves
+            if (!seller.isVerified()) {
+                seller.setVerified(true);
+                seller.setLocked(false);  // unlock after admin approval
+
+                // Send approval mail
+                emailService.sendSellerApprovalEmail(
+                        seller.getEmail(),
+                        seller.getFullName()
+                );
+
+                sellerRepo.save(seller);
+                return "Seller approved successfully. Approval email sent.";
+            }
+
+            // Already verified earlier
+            return "Seller already verified.";
+        }
+
+        // =============== ADMIN UNVERIFIES SELLER ===============
+        seller.setVerified(false);
+        seller.setLocked(true); // lock again
         sellerRepo.save(seller);
 
-        return status ? "Seller verified successfully" : "Seller unverified successfully";
+        return "Seller marked as unverified.";
     }
+
 
     // ===========================================
 // UNVERIFIED SELLERS

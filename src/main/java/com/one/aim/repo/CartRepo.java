@@ -1,6 +1,8 @@
 package com.one.aim.repo;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -12,22 +14,37 @@ import com.one.aim.bo.CartBO;
 @Repository
 public interface CartRepo extends JpaRepository<CartBO, Long> {
 
-	// List<CartBO> findByUserId(Long userId);
+    // -----------------------------
+    // USER CART (Add-to-Cart items)
+    // -----------------------------
+    List<CartBO> findAllByUserAddToCart_Id(Long userId);
 
-	// List<CartBO> findBy
+    // -----------------------------
+    // SELLER CARTS
+    // (sellerId is stored as Long inside CartBO)
+    // -----------------------------
+    List<CartBO> findAllBySellerId(Long sellerId);
 
-	List<CartBO> findByEnabledIsTrue();
+    // -----------------------------
+    // SEARCH carts by product name
+    // (pname = product snapshot name)
+    // -----------------------------
+    Page<CartBO> findByPnameContainingIgnoreCase(String pname, Pageable pageable);
 
-	List<CartBO> findAllByCategoryAndVarifiedIsTrue(String category);
+    // -----------------------------
+    // Filter by enabled flag
+    // -----------------------------
+    Page<CartBO> findAllByEnabledTrue(Pageable pageable);
 
-	List<CartBO> findAllByCartempid(Long id);
+    List<CartBO> findAllByEnabledTrue();
 
-	List<CartBO> findAllByCartempidAndCartempname(Long id, String name);
+    Collection<Object> findByUserAddToCart_Id(Long userId);
 
-	Page<CartBO> findAllByVarifiedIsTrue(Pageable pageable);
-
-	List<CartBO> findByPnameContainingIgnoreCase(String pname);
-
-	Page<CartBO> findByPnameContainingIgnoreCase(String pname, Pageable pageable);
-
+    // -----------------------------
+    // Category search (if needed)
+    // NOTE: Only if CartBO has category removed,
+    // this should be removed from service layer too.
+    // -----------------------------
+    //  Category does NOT exist anymore in CartBO
+    // so DO NOT include findAllByCategory...
 }

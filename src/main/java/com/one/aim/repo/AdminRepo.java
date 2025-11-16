@@ -22,4 +22,7 @@ public interface AdminRepo extends JpaRepository<AdminBO, Long> {
     //  Replaces old findByEmailOrUsername
     Optional<AdminBO> findByEmailOrFullName(String email, String fullName);
 
+    Optional<AdminBO> findByEmailIgnoreCase(String email);
+
+    Optional<AdminBO> findByResetToken(String token);
 }

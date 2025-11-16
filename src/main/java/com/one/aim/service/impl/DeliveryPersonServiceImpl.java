@@ -3,6 +3,8 @@ package com.one.aim.service.impl;
 import java.util.List;
 import java.util.Optional;
 
+import com.one.aim.repo.AdminRepo;
+import com.one.aim.service.FileService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -40,133 +42,151 @@ public class DeliveryPersonServiceImpl implements DeliveryPersonService {
 	@Autowired
 	private PasswordEncoder passwordEncoder;
 
-	@Override
-	public BaseRs saveDeliveryPerson(DeliveryPersonRq rq) {
+    @Autowired
+    private FileService fileService;
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing saveDeliveryPerson(CompanyRq) ->");
-		}
+    @Autowired
+    private AdminRepo adminRepo;
 
-		// List<String> errors = UserHelper.validateUser(rq);
+    @Override
+    public BaseRs saveDeliveryPerson(DeliveryPersonRq rq) {
 
-//		if (Utils.isNotEmpty(errors)) {
-//			log.error(ErrorCodes.EC_INVALID_INPUT);
-//			return ResponseUtils.failure(ErrorCodes.EC_INVALID_INPUT, errors);
-//		}
-		String docId = Utils.getValidString(rq.getDocId());
-		String message = StringConstants.EMPTY;
-		DeliveryPersonBO userBO = null;
-		if (Utils.isNotEmpty(docId)) { // UPDATE
-			long id = Long.parseLong(docId);
-			Optional<DeliveryPersonBO> optUserBO = deliveryPersonRepo.findById(id);
-			userBO = optUserBO.get();
-			if (userBO == null) {
-				log.error(ErrorCodes.EC_USER_NOT_FOUND);
-				return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND);
-			}
-		} else {
-			userBO = new DeliveryPersonBO(); // SAVE
-			message = MessageCodes.MC_SAVED_SUCCESSFUL;
-		}
-		String email = Utils.getValidString(rq.getEmail());
-		if (!email.equals(Utils.getValidString(userBO.getEmail()))) {
-			userBO.setEmail(email);
-		}
-		String userName = Utils.getValidString(rq.getName());
-		if (!userName.equals(userBO.getFullName())) {
-			userBO.setFullName(userName);
-		}
-		String phoneNo = Utils.getValidString(rq.getPhoneno());
-		if (!phoneNo.equals(userBO.getPhoneNo())) {
-			userBO.setPhoneNo(phoneNo);
-		}
-		String aadhar = Utils.getValidString(rq.getAadhar());
-		if (!aadhar.equals(userBO.getAadharNo())) {
-			userBO.setAadharNo(aadhar);
-		}
-		String pan = Utils.getValidString(rq.getPan());
-		if (!pan.equals(userBO.getPan())) {
-			userBO.setPan(pan);
-		}
-		String bikeNo = Utils.getValidString(rq.getBikeno());
-		if (!bikeNo.equals(userBO.getBikeNo())) {
-			userBO.setBikeNo(bikeNo);
-		}
-		String driveLience = Utils.getValidString(rq.getDriveLience());
-		if (!driveLience.equals(userBO.getDrivingLicence())) {
-			userBO.setDrivingLicence(driveLience);
-		}
-		String city = Utils.getValidString(rq.getCity());
-		if (!city.equals(userBO.getCity())) {
-			userBO.setCity(city);
-		}
-		String rawPassword = Utils.getValidString(rq.getPassword());
-		String existingEncodedPassword = userBO.getPassword();
+        if (log.isDebugEnabled()) {
+            log.debug("Executing saveDeliveryPerson(CompanyRq) ->");
+        }
 
-		if (!passwordEncoder.matches(rawPassword, existingEncodedPassword)) {
-			String hashedPassword = passwordEncoder.encode(rawPassword);
-			System.out.println("Hashed Password: " + hashedPassword);
-			userBO.setPassword(hashedPassword);
-		}
-//		userBO.setAtts(fileService.prepareAttBOs(rq.getElExemptionAtts(), null));
-		deliveryPersonRepo.save(userBO);
-		DeliveryPersonRs deliveryPersonRs = DeliveryPersonMapper.mapToDeliveryPersonRs(userBO);
-		return ResponseUtils.success(new DeliveryPersonDataRs(message, deliveryPersonRs));
-	}
+        String docId = Utils.getValidString(rq.getDocId());
+        String message = StringConstants.EMPTY;
+        DeliveryPersonBO userBO;
 
-	@Override
-	public BaseRs retrieveDeliveryPersons() {
+        // UPDATE
+        if (Utils.isNotEmpty(docId)) {
+            long id = Long.parseLong(docId);
+            userBO = deliveryPersonRepo.findById(id)
+                    .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_USER_NOT_FOUND));
+        }
+        // CREATE
+        else {
+            userBO = new DeliveryPersonBO();
+            message = MessageCodes.MC_SAVED_SUCCESSFUL;
+        }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing retrieveDeliveryPersons() ->");
-		}
+        String email = Utils.getValidString(rq.getEmail());
+        if (!email.equals(userBO.getEmail())) userBO.setEmail(email);
 
-		try {
-			UserBO userBO = userRepo.findByFullNameAndId(AuthUtils.findLoggedInUser().getFullName(),
-					AuthUtils.findLoggedInUser().getDocId());
-			if (userBO != null) {
-				log.error(ErrorCodes.EC_UNAUTHORIZED_ACCESS);
-				return ResponseUtils.failure(ErrorCodes.EC_UNAUTHORIZED_ACCESS);
-			}
-			List<DeliveryPersonBO> deliveryPersonBOs = deliveryPersonRepo.findAll();
-			String message = MessageCodes.MC_RETRIEVED_SUCCESSFUL;
-			if (Utils.isEmpty(deliveryPersonBOs)) {
-				message = MessageCodes.MC_NO_RECORDS_FOUND;
-			}
-			List<DeliveryPersonRs> rsList = DeliveryPersonMapper.mapToDeliveryPersonRsList(deliveryPersonBOs);
-			return ResponseUtils.success(new DeliveryPersonDataRsList(message, rsList));
-		} catch (Exception e) {
-			log.error("Exception in retrieveDeliveryPersons() ->" + e);
-			return null;
-		}
-	}
+        String userName = Utils.getValidString(rq.getName());
+        if (!userName.equals(userBO.getFullName())) userBO.setFullName(userName);
 
-	@Override
-	public BaseRs retrieveDeliveryPersonById(String id) {
+        String phoneNo = Utils.getValidString(rq.getPhoneno());
+        if (!phoneNo.equals(userBO.getPhoneNo())) userBO.setPhoneNo(phoneNo);
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing retrieveDeliveryPersonById(id) ->");
-		}
+        String aadhar = Utils.getValidString(rq.getAadhar());
+        if (!aadhar.equals(userBO.getAadharNo())) userBO.setAadharNo(aadhar);
 
-		try {
-			UserBO userBO = userRepo.findByFullNameAndId(AuthUtils.findLoggedInUser().getFullName(),
-					AuthUtils.findLoggedInUser().getDocId());
-			if (userBO != null) {
-				log.error(ErrorCodes.EC_UNAUTHORIZED_ACCESS);
-				return ResponseUtils.failure(ErrorCodes.EC_UNAUTHORIZED_ACCESS);
-			}
-			Optional<DeliveryPersonBO> deliveryPersonBO = deliveryPersonRepo.findById(Long.parseLong(id));
-			String message = MessageCodes.MC_RETRIEVED_SUCCESSFUL;
-			if (deliveryPersonBO == null) {
-				message = MessageCodes.MC_NO_RECORDS_FOUND;
-			}
-			DeliveryPersonRs rs = DeliveryPersonMapper.mapToDeliveryPersonRs(deliveryPersonBO.get());
-			return ResponseUtils.success(new DeliveryPersonDataRs(message, rs));
-		} catch (Exception e) {
-			log.error("Exception in retrieveDeliveryPersonById(id) ->" + e);
-			return null;
-		}
+        String pan = Utils.getValidString(rq.getPan());
+        if (!pan.equals(userBO.getPan())) userBO.setPan(pan);
 
-	}
+        String bikeNo = Utils.getValidString(rq.getBikeno());
+        if (!bikeNo.equals(userBO.getBikeNo())) userBO.setBikeNo(bikeNo);
+
+        String driveLience = Utils.getValidString(rq.getDriveLience());
+        if (!driveLience.equals(userBO.getDrivingLicence())) userBO.setDrivingLicence(driveLience);
+
+        String city = Utils.getValidString(rq.getCity());
+        if (!city.equals(userBO.getCity())) userBO.setCity(city);
+
+        String rawPassword = Utils.getValidString(rq.getPassword());
+        String existingEncodedPassword = userBO.getPassword();
+
+        // Update password only if changed
+        if (!passwordEncoder.matches(rawPassword, existingEncodedPassword)) {
+            userBO.setPassword(passwordEncoder.encode(rawPassword));
+        }
+
+        deliveryPersonRepo.save(userBO);
+
+        // ******* UPDATED LINE ↓↓↓ ********
+        DeliveryPersonRs deliveryPersonRs =
+                DeliveryPersonMapper.mapToDeliveryPersonRs(userBO, fileService);
+
+        return ResponseUtils.success(new DeliveryPersonDataRs(message, deliveryPersonRs));
+    }
+
+
+    @Override
+    public BaseRs retrieveDeliveryPersons() {
+
+        if (log.isDebugEnabled()) {
+            log.debug("Executing retrieveDeliveryPersons() ->");
+        }
+
+        try {
+            // Only Admin can view all delivery persons → block USER
+            UserBO userBO = userRepo.findByFullNameAndId(
+                    AuthUtils.findLoggedInUser().getFullName(),
+                    AuthUtils.findLoggedInUser().getDocId());
+
+            if (userBO != null) {
+                log.error(ErrorCodes.EC_UNAUTHORIZED_ACCESS);
+                return ResponseUtils.failure(ErrorCodes.EC_UNAUTHORIZED_ACCESS);
+            }
+
+            List<DeliveryPersonBO> deliveryPersonBOs = deliveryPersonRepo.findAll();
+            String message = MessageCodes.MC_RETRIEVED_SUCCESSFUL;
+
+            if (Utils.isEmpty(deliveryPersonBOs)) {
+                message = MessageCodes.MC_NO_RECORDS_FOUND;
+            }
+
+            // ✅ Updated to pass fileService
+            List<DeliveryPersonRs> rsList =
+                    DeliveryPersonMapper.mapToDeliveryPersonRsList(deliveryPersonBOs, fileService);
+
+            return ResponseUtils.success(new DeliveryPersonDataRsList(message, rsList));
+
+        } catch (Exception e) {
+            log.error("Exception in retrieveDeliveryPersons() -> " + e);
+            return null;
+        }
+    }
+
+
+    @Override
+    public BaseRs retrieveDeliveryPersonById(String id) {
+
+        if (log.isDebugEnabled()) {
+            log.debug("Executing retrieveDeliveryPersonById(id) ->");
+        }
+
+        try {
+            // Allow only ADMIN to access
+            Long loggedId = AuthUtils.findLoggedInUser().getDocId();
+            String loggedName = AuthUtils.findLoggedInUser().getFullName();
+
+            boolean isAdmin = adminRepo.findByIdAndFullName(loggedId, loggedName) != null;
+
+            if (!isAdmin) {
+                return ResponseUtils.failure(ErrorCodes.EC_UNAUTHORIZED_ACCESS);
+            }
+
+            Optional<DeliveryPersonBO> opt = deliveryPersonRepo.findById(Long.parseLong(id));
+
+            if (opt.isEmpty()) {
+                return ResponseUtils.failure(MessageCodes.MC_NO_RECORDS_FOUND);
+            }
+
+            DeliveryPersonRs rs =
+                    DeliveryPersonMapper.mapToDeliveryPersonRs(opt.get(), fileService);
+
+            return ResponseUtils.success(
+                    new DeliveryPersonDataRs(MessageCodes.MC_RETRIEVED_SUCCESSFUL, rs)
+            );
+        }
+        catch (Exception e) {
+            log.error("Exception in retrieveDeliveryPersonById(id) -> " + e);
+            return ResponseUtils.failure(ErrorCodes.EC_INTERNAL_ERROR);
+        }
+    }
+
 
 }

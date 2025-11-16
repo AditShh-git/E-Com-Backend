@@ -1,31 +1,51 @@
 package com.one.aim.service;
 
+import com.one.aim.bo.SellerBO;
 import com.one.aim.rq.SellerRq;
 import com.one.aim.rq.UpdateRq;
 import com.one.vm.core.BaseRs;
 
 public interface SellerService {
 
-	public BaseRs saveSeller(SellerRq rq) throws Exception;
+    // ===========================================================
+    // SELLER SIGN-UP
+    // ===========================================================
+    BaseRs saveSeller(SellerRq rq) throws Exception;
 
-    BaseRs signInSeller(String email, String password) throws Exception;
+    // ===========================================================
+    // RETRIEVE SINGLE SELLER (Logged-in seller)
+    // ===========================================================
+    BaseRs retrieveSeller() throws Exception;
 
-    public BaseRs retrieveSeller() throws Exception;
+    // ===========================================================
+    // RETRIEVE ALL SELLERS (Admin Only)
+    // ===========================================================
+    BaseRs retrieveSellers() throws Exception;
 
-	public BaseRs retrieveSellers() throws Exception;
+    // ===========================================================
+    // RETRIEVE SELLER CARTS (Seller-only)
+    // ===========================================================
+    BaseRs retrieveSellerCarts() throws Exception;
 
-	public BaseRs retrieveSellerCarts() throws Exception;
+    // ===========================================================
+    // DELETE SELLER (Admin Only)
+    // ===========================================================
+    BaseRs deleteSeller(String id) throws Exception;
 
-	public BaseRs deleteSeller(String id) throws Exception;
+    // ===========================================================
+    // EMAIL VERIFICATION (Signup + Email change)
+    // ===========================================================
+    void sendVerificationEmail(SellerBO seller);
 
-    BaseRs forgotPassword(String email) throws Exception;
+    BaseRs verifyEmail(String token) throws Exception;
 
-    BaseRs resetPassword(String token, String newPassword) throws Exception;
+    // ===========================================================
+    // ADMIN APPROVAL EMAIL
+    // ===========================================================
+    void sendAdminApprovalEmail(SellerBO seller);
 
-//    BaseRs updateSellerProfile(UpdateRq request) throws Exception;
-
+    // ===========================================================
+    // UPDATE SELLER PROFILE
+    // ===========================================================
     BaseRs updateSellerProfile(String email, SellerRq rq) throws Exception;
-
-
-
 }

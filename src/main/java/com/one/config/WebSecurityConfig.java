@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
+import org.springframework.security.authentication.AccountStatusUserDetailsChecker;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
@@ -68,8 +69,13 @@ public class WebSecurityConfig {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
         authProvider.setUserDetailsService(userDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder());
+
+        //  IMPORTANT — enables isEnabled(), isAccountNonLocked(), etc.
+        authProvider.setPreAuthenticationChecks(new AccountStatusUserDetailsChecker());
+
         return authProvider;
     }
+
 
     // ---------------------------------------------------------------
     //  3. Authentication Manager
@@ -114,72 +120,61 @@ public class WebSecurityConfig {
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
-
                 .authorizeHttpRequests(auth -> auth
 
-                        // =============================
-                        // PUBLIC USER AUTH
-                        // =============================
+                        // ======================================
+                        // PUBLIC AUTH (ALL ROLES)
+                        // ======================================
+                        .requestMatchers(
+                                "/auth/**"
+                        ).permitAll()
+
+                        // ======================================
+                        // PUBLIC SIGNUP ROUTES
+                        // ======================================
                         .requestMatchers(
                                 "/api/user/signup",
-                                "/api/user/signin",
-                                "/api/user/forgot-password",
-                                "/api/user/reset-password",
-                                "/api/user/verify-email"
-                        ).permitAll()
-
-                        // =============================
-                        // PUBLIC ADMIN AUTH
-                        // =============================
-                        .requestMatchers(
-                                "/api/admin/signup",
-                                "/api/admin/signin"
-                        ).permitAll()
-
-                        // =============================
-                        // PUBLIC SELLER AUTH
-                        // =============================
-                        .requestMatchers(
                                 "/api/seller/signup",
-                                "/api/seller/signin",
-                                "/api/seller/forgot-password",
-                                "/api/seller/reset-password"
+                                "/api/admin/create"
                         ).permitAll()
 
-                        // =============================
+                        // ======================================
                         // PUBLIC BROWSING ROUTES
-                        // =============================
+                        // ======================================
                         .requestMatchers(
                                 "/api/public/**",
-                                "/api/carts/**",
                                 "/api/search",
                                 "/api/cart/category/**"
                         ).permitAll()
 
-                        // =============================
-                        // USER (MUST BE VERIFIED)
-                        // =============================
+                        // ======================================
+                        // USER (MUST BE AUTHENTICATED)
+                        // ======================================
                         .requestMatchers(
-                                "/api/cart/addtocart",
-                                "/api/order/save",
+                                "/api/cart/**",
+                                "/api/order/**",
                                 "/api/user/me",
-                                "/api/user/logout",
-                                "/api/user/profile/update"
+                                "/api/user/profile/update",
+                                "/api/user/download/**"
                         ).hasAuthority("USER")
 
-                        // =============================
+                        // ======================================
                         // SELLER ROUTES
-                        // =============================
+                        // ======================================
                         .requestMatchers(
                                 "/api/seller/me",
                                 "/api/seller/carts",
-                                "/api/seller/product/**"
+                                "/api/seller/product/**",
+                                "/api/seller/download/**",
+                                "/api/seller/all/invoices"
                         ).hasAuthority("SELLER")
 
-                        // =============================
-                        // ADMIN ONLY ROUTES
-                        // =============================
-                        .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
+                        // ======================================
+                        // ADMIN ROUTES
+                        // ======================================
+                        .requestMatchers(
+                                "/api/admin/**"
+                        ).hasAuthority("ADMIN")
 
                         .anyRequest().authenticated()
                 );
@@ -188,6 +183,9 @@ public class WebSecurityConfig {
 
         return http.build();
     }
+
+
+
 
 
 

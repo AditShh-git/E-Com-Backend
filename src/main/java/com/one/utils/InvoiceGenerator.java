@@ -71,7 +71,7 @@ public class InvoiceGenerator {
     private String buildInvoiceHtml(OrderBO order) throws IOException {
 
 
-        String template = loadTemplate("templates/invoice_template.html");
+        String template = loadTemplate("templates/invoice-template.html");
 
         String orderItemsHtml = buildProductRows(order);
 

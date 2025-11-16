@@ -23,4 +23,5 @@ public interface UserRepo extends JpaRepository<UserBO, Long> {
     UserBO findByFullNameAndId(String fullName, Long id);
 
 
+    Optional<Object> findByEmailIgnoreCase(String email);
 }

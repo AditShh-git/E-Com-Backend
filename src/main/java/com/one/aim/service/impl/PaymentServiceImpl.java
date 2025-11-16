@@ -98,12 +98,12 @@ public class PaymentServiceImpl implements PaymentService {
 
 		OrderBO orderBO = optOrderBO.get();
 		orderBO.setRazorpayorderid(razorpayOrder.get("id").toString()); // convert to string
-		orderBO.setPaymentstatus("CREATED");
+		orderBO.setPaymentStatus("CREATED");
 		orderRepo.save(orderBO);
 
 		JSONObject response = new JSONObject();
 		response.put("amount", ((Number) razorpayOrder.get("amount")).longValue());
-		response.put("status", orderBO.getPaymentstatus());
+		response.put("status", orderBO.getPaymentStatus());
 
 		return response.toString();
 	}

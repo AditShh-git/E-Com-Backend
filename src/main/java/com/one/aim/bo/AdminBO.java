@@ -58,6 +58,30 @@ public class AdminBO {
     private byte[] image;
 
     // ===========================================================
+    // EMAIL VERIFICATION + ACTIVE STATUS
+    // ===========================================================
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean emailVerified = false;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean active = false;
+
+    @Column(length = 255)
+    private String verificationToken;
+
+    private LocalDateTime verificationTokenExpiry;
+
+    // ===========================================================
+    // PASSWORD RESET
+    // ===========================================================
+    @Column(length = 255)
+    private String resetToken;
+
+    private LocalDateTime resetTokenExpiry;
+
+    // ===========================================================
     // AUDIT FIELDS
     // ===========================================================
     @Column(name = "created_at", nullable = false, updatable = false)

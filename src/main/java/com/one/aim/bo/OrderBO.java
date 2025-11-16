@@ -4,22 +4,12 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-import jakarta.persistence.CollectionTable;
-import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.JoinTable;
-import jakarta.persistence.ManyToMany;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 @Getter
 @Setter
@@ -28,53 +18,52 @@ import lombok.Setter;
 @Table(name = "orders")
 public class OrderBO {
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-	private Long totalAmount;
+    private Long totalAmount;
+    private String paymentMethod;   // COD, UPI, CARD
+    private LocalDateTime orderTime;
 
-	private String paymentMethod;
+    private String orderStatus;     // INITIAL, CONFIRMED, SHIPPED, DELIVERED
 
-	private LocalDateTime orderTime;
+    // REMOVED FIELD: cartempids
+    // Reason: CartBO no longer stores sellerId after redesign.
+    // Seller is now derived directly from ProductBO → SellerBO.
+    // Keeping seller IDs in OrderBO became duplicate + incorrect.
 
-	private String orderStatus;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private UserBO user;
 
-	// --- Creator fields (Only one should be non-null) ---
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "address_id", nullable = false)
+    private AddressBO shippingAddress;
 
-	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "user_id")
-	private UserBO user;
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "order_cart_items",
+            joinColumns = @JoinColumn(name = "order_id"),
+            inverseJoinColumns = @JoinColumn(name = "cart_id")
+    )
+    private List<CartBO> cartItems = new ArrayList<>();
 
-	// SELLER , VENDOR, ADMIN
-	@ElementCollection
-	@CollectionTable(name = "order_cartempids", joinColumns = @JoinColumn(name = "order_id"))
-	@Column(name = "cartempid")
-	private List<Long> cartempids = new ArrayList<>();
 
-	// --- If one order has multiple delivery addresses (e.g. for multiple carts)
-	// ---
 
-	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "address_id", nullable = false)
-	private AddressBO shippingAddress;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "delivery_person_id")
+    private DeliveryPersonBO deliveryPerson;
 
-	// --- Ordered cart items ---
+    private String deliveryStatus;
+    private String paymentStatus;
 
-	@ManyToMany(fetch = FetchType.LAZY)
-	@JoinTable(name = "order_cart_items", joinColumns = @JoinColumn(name = "order_id"), inverseJoinColumns = @JoinColumn(name = "cart_id"))
-	private List<CartBO> cartItems;
+    private String razorpayorderid;
+    private String invoiceno;
 
-	@ManyToOne
-	@JoinColumn(name = "delivery_person_id")
-	private DeliveryPersonBO deliveryPerson;
+    @CreationTimestamp
+    private LocalDateTime createdAt;
 
-	private String deliverystatus; // CREATED, ASSIGNED, PICKED_UP, DELIVERED, PENDING
-
-	private String paymentstatus; // CREATED, ASSIGNED, PICKED_UP, DELIVERED, PENDING
-
-	private String razorpayorderid;
-
-	private String invoiceno;
-
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
 }

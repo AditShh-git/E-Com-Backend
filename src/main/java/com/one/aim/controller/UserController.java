@@ -1,14 +1,18 @@
 package com.one.aim.controller;
 
+import com.one.aim.bo.FileBO;
+import com.one.aim.bo.InvoiceBO;
+import com.one.aim.repo.FileRepo;
+import com.one.aim.repo.InvoiceRepo;
 import com.one.aim.rq.UpdateRq;
 import com.one.aim.service.AuthService;
+import com.one.aim.service.InvoiceService;
 import com.one.utils.AuthUtils;
 import com.one.vm.core.BaseRs;
+import com.one.vm.utils.ResponseUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -33,12 +37,13 @@ import lombok.extern.slf4j.Slf4j;
 public class UserController {
 
     private final UserService userService;
-    private final AuthService authService;
-    private final AuthenticationManager authenticationManager;
+    private final InvoiceService invoiceService;
+    private final InvoiceRepo invoiceRepo;
+    private final FileRepo fileRepo;
 
-    // ============================================
-    //  REGISTER / SIGN-UP
-    // ============================================
+    // ===========================================================
+    // USER SIGNUP
+    // ===========================================================
     @PostMapping(value = "/signup", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> registerUser(
             @ModelAttribute UserRq rq,
@@ -54,82 +59,36 @@ public class UserController {
         return ResponseEntity.ok(userService.saveUser(rq));
     }
 
-    // ============================================
-    //  LOGIN
-    // ============================================
-    @PostMapping("/signin")
-    public ResponseEntity<BaseRs> signIn(@RequestBody LoginRq rq) throws Exception {
-        log.debug("Executing [POST /api/user/signin] for user: {}", rq.getEmail());
-
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(rq.getEmail(), rq.getPassword())
-        );
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        log.info("User '{}' successfully signed in", rq.getEmail());
-        return ResponseEntity.ok(authService.signIn(authentication));
-    }
-
-    // ============================================
-    //  CURRENT USER PROFILE
-    // ============================================
+    // ===========================================================
+    // GET CURRENT LOGGED-IN USER
+    // ===========================================================
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser() throws Exception {
         log.debug("Executing [GET /api/user/me]");
         return ResponseEntity.ok(userService.retrieveUser());
     }
 
-    // ============================================
-    //  ALL USERS (Admin)
-    // ============================================
+    // ===========================================================
+    // GET ALL USERS (ADMIN ONLY)
+    // ===========================================================
     @GetMapping("/all")
     public ResponseEntity<?> getAllUsers() throws Exception {
         log.debug("Executing [GET /api/user/all]");
         return ResponseEntity.ok(userService.retrieveAllUser());
     }
 
-    // ============================================
-    //  DELETE USER (Admin)
-    // ============================================
+    // ===========================================================
+    // DELETE USER (ADMIN ONLY)
+    // ===========================================================
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteUser(@PathVariable String id) throws Exception {
         log.debug("Executing [DELETE /api/user/{}]", id);
         return ResponseEntity.ok(userService.deleteUser(id));
     }
 
-    // ============================================
-    //  FORGOT PASSWORD
-    // ============================================
-    @PostMapping("/forgot-password")
-    public ResponseEntity<BaseRs> forgotPassword(@RequestParam String email) {
-        log.debug("Executing [POST /api/user/forgot-password]");
-        return ResponseEntity.ok(authService.forgotPassword(email));
-    }
-
-    // ============================================
-    //  RESET PASSWORD
-    // ============================================
-    @PostMapping("/reset-password")
-    public ResponseEntity<BaseRs> resetPassword(
-            @RequestParam String token,
-            @RequestParam String newPassword) {
-
-        log.debug("Executing [POST /api/user/reset-password]");
-        return ResponseEntity.ok(authService.resetPassword(token, newPassword));
-    }
-
-    // ============================================
-    //  LOGOUT
-    // ============================================
-    @PostMapping("/logout")
-    public ResponseEntity<BaseRs> logout() throws Exception {
-        log.debug("Executing [POST /api/user/logout]");
-        return ResponseEntity.ok(authService.logout());
-    }
-
-    // ============================================
-//  UPDATE USER PROFILE
-// ============================================
+    // ===========================================================
+    // UPDATE USER PROFILE
+    // ===========================================================
     @PreAuthorize("hasAuthority('USER')")
     @PutMapping(value = "/profile/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<BaseRs> updateProfile(
@@ -153,17 +112,34 @@ public class UserController {
         rq.setConfirmPassword(confirmPassword);
         rq.setImage(image);
 
-        // **THE FIX HERE** → use Spring Security directly
         String loggedEmail = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        BaseRs response = userService.updateUserProfile(loggedEmail, rq);
-
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(userService.updateUserProfile(loggedEmail, rq));
     }
 
-    @PostMapping("/verify-email")
-    public ResponseEntity<BaseRs> verifyEmail(@RequestParam("token") String token) {
-        log.debug("Email verification attempt with token");
-        return ResponseEntity.ok(userService.verifyEmail(token));
-    }
+//    // ===========================================================
+//    // DOWNLOAD INVOICE FOR USER
+//    // ===========================================================
+//    @GetMapping("/download/{orderId}")
+//    public ResponseEntity<byte[]> downloadInvoiceForUser(@PathVariable Long orderId) throws Exception {
+//
+//        InvoiceBO invoice = invoiceRepo.findByOrder_Id(orderId)
+//                .orElseThrow(() -> new RuntimeException("Invoice not found"));
+//
+//        FileBO file = fileRepo.findById(invoice.getInvoiceFileId())
+//                .orElseThrow(() -> new RuntimeException("Invoice PDF file missing"));
+//
+//        if (file.getInputstream() == null) {
+//            throw new RuntimeException("PDF content empty");
+//        }
+//
+//        HttpHeaders headers = new HttpHeaders();
+//        headers.setContentType(MediaType.APPLICATION_PDF);
+//        headers.setContentDisposition(ContentDisposition
+//                .attachment()
+//                .filename(invoice.getInvoiceNumber() + ".pdf")
+//                .build());
+//
+//        return new ResponseEntity<>(file.getInputstream(), headers, HttpStatus.OK);
+//    }
 }

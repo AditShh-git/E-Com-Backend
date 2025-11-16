@@ -9,6 +9,7 @@ import com.one.aim.bo.OrderBO;
 import com.one.aim.bo.SellerBO;
 import com.one.aim.bo.VendorBO;
 import com.one.aim.rs.OrderRs;
+import com.one.aim.service.FileService;
 import com.one.utils.Utils;
 
 import lombok.extern.slf4j.Slf4j;
@@ -16,128 +17,72 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class OrderMapper {
 
-	public static OrderRs mapToOrderRs(OrderBO bo) {
+    public static OrderRs mapToOrderRs(OrderBO bo, FileService fileService) {
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToOrderRs(OrderBO) ->");
-		}
+        if (log.isDebugEnabled()) {
+            log.debug("Executing mapToOrderRs(OrderBO) ->");
+        }
 
-		try {
-			OrderRs rs = null;
+        try {
+            if (bo == null) {
+                log.warn("OrderBO is NULL");
+                return null;
+            }
 
-			if (null == bo) {
-				log.warn("UserBO is NULL");
-				return rs;
-			}
-			rs = new OrderRs();
+            OrderRs rs = new OrderRs();
 
-			rs.setDocId(String.valueOf(bo.getId()));
-			long totalAmount = 0;
-			if (Utils.isNotEmpty(bo.getCartItems())) {
-				rs.setOrderedItems(CartMapper.mapToCartRsList(bo.getCartItems()));
-				for (CartBO cartBO : bo.getCartItems()) {
-					totalAmount = totalAmount + cartBO.getPrice();
-				}
-			}
-			rs.setTotalAmount(totalAmount);
-			rs.setOrderTime(bo.getOrderTime());
-			rs.setPaymentMethod(bo.getPaymentMethod());
-			rs.setUser(UserMapper.mapToUserRs(bo.getUser()));
-			rs.setOrderStatus(bo.getOrderStatus());
-			return rs;
-		} catch (Exception e) {
-			log.error("Exception in mapToOrderRs(OrderBO) - " + e);
-			return null;
-		}
-	}
+            rs.setDocId(String.valueOf(bo.getId()));
 
-	public static List<OrderRs> mapToOrderRsList(List<OrderBO> bos) {
+            long totalAmount = 0;
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToOrderRsList(OrderBO) ->");
-		}
+            if (Utils.isNotEmpty(bo.getCartItems())) {
 
-		try {
-			if (Utils.isEmpty(bos)) {
-				log.warn("OrderBO is NULL");
-				return Collections.emptyList();
-			}
+                rs.setOrderedItems(
+                        CartMapper.mapToCartRsList(bo.getCartItems(), fileService)
+                );
 
-			List<OrderRs> rsList = new ArrayList<>();
-			for (OrderBO bo : bos) {
-				OrderRs rs = mapToOrderRs(bo);
-				if (null != rs) {
-					rsList.add(rs);
-				}
-			}
-			return rsList;
-		} catch (Exception e) {
-			log.error("Exception in mapToOrderRsList(OrderBO) - " + e);
-			return Collections.emptyList();
-		}
-	}
+                for (CartBO cartBO : bo.getCartItems()) {
+                    totalAmount += cartBO.getPrice() * cartBO.getQuantity();
+                }
+            }
 
-	public static List<OrderRs> mapToOrderRsAdminList(List<OrderBO> bos, List<List<SellerBO>> sellerBOs,
-			List<List<VendorBO>> vendorBOs) {
+            rs.setTotalAmount(totalAmount);
+            rs.setOrderTime(bo.getOrderTime());
+            rs.setPaymentMethod(bo.getPaymentMethod());
+            rs.setUser(UserMapper.mapToUserRs(bo.getUser()));
+            rs.setOrderStatus(bo.getOrderStatus());
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToOrderRsList(OrderBO) ->");
-		}
+            return rs;
 
-		try {
-			if (Utils.isEmpty(bos)) {
-				log.warn("OrderBO is NULL");
-				return Collections.emptyList();
-			}
+        } catch (Exception e) {
+            log.error("Exception in mapToOrderRs(OrderBO) - " + e);
+            return null;
+        }
+    }
 
-			List<OrderRs> rsList = new ArrayList<>();
-			int index = 0;
-			for (OrderBO bo : bos) {
-				OrderRs rs = mapToOrderAdminRs(bo, sellerBOs.get(index), vendorBOs.get(index));
-				index++;
-				if (null != rs) {
-					rsList.add(rs);
-				}
-			}
-			return rsList;
-		} catch (Exception e) {
-			log.error("Exception in mapToOrderRsList(OrderBO) - " + e);
-			return Collections.emptyList();
-		}
-	}
 
-	public static OrderRs mapToOrderAdminRs(OrderBO bo, List<SellerBO> sellerBOs, List<VendorBO> vendorBOs) {
+    public static List<OrderRs> mapToOrderRsList(List<OrderBO> bos, FileService fileService) {
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToOrderRs(OrderBO) ->");
-		}
+        if (log.isDebugEnabled()) {
+            log.debug("Executing mapToOrderRsList(OrderBO) ->");
+        }
 
-		try {
-			OrderRs rs = null;
+        try {
+            if (Utils.isEmpty(bos))
+                return Collections.emptyList();
 
-			if (null == bo) {
-				log.warn("UserBO is NULL");
-				return rs;
-			}
-			rs = new OrderRs();
+            List<OrderRs> rsList = new ArrayList<>();
 
-			rs.setDocId(String.valueOf(bo.getId()));
-			long totalAmount = 0;
-			if (Utils.isNotEmpty(bo.getCartItems())) {
-				rs.setOrderedItems(CartMapper.mapToCartRsList(bo.getCartItems()));
-				for (CartBO cartBO : bo.getCartItems()) {
-					totalAmount = totalAmount + cartBO.getPrice();
-				}
-			}
-			rs.setTotalAmount(totalAmount);
-			rs.setOrderTime(bo.getOrderTime());
-			rs.setPaymentMethod(bo.getPaymentMethod());
-			rs.setUser(UserMapper.mapToUserRs(bo.getUser()));
-			return rs;
-		} catch (Exception e) {
-			log.error("Exception in mapToOrderRs(OrderBO) - " + e);
-			return null;
-		}
-	}
+            for (OrderBO bo : bos) {
+                OrderRs rs = mapToOrderRs(bo, fileService);
+                if (rs != null) rsList.add(rs);
+            }
 
+            return rsList;
+
+        } catch (Exception e) {
+            log.error("Exception in mapToOrderRsList(OrderBO) - " + e);
+            return Collections.emptyList();
+        }
+    }
 }

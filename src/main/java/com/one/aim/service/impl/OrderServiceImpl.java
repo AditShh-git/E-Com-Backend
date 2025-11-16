@@ -1,15 +1,16 @@
 package com.one.aim.service.impl;
 
-import com.one.aim.bo.AddressBO;
-import com.one.aim.bo.CartBO;
-import com.one.aim.bo.OrderBO;
-import com.one.aim.bo.UserBO;
+import com.itextpdf.html2pdf.HtmlConverter;
+import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfWriter;
+import com.one.aim.bo.*;
 import com.one.aim.controller.OrderNotificationController;
-import com.one.aim.repo.AddressRepo;
-import com.one.aim.repo.CartRepo;
-import com.one.aim.repo.OrderRepo;
-import com.one.aim.repo.UserRepo;
+import com.one.aim.mapper.OrderMapper;
+import com.one.aim.repo.*;
 import com.one.aim.rq.OrderRq;
+import com.one.aim.rs.data.OrderDataRsList;
+import com.one.aim.service.FileService;
+import com.one.aim.service.InvoiceService;
 import com.one.aim.service.OrderService;
 import com.one.utils.AuthUtils;
 import com.one.utils.InvoiceGenerator;
@@ -21,6 +22,8 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -38,19 +41,26 @@ public class OrderServiceImpl implements OrderService {
     private final UserRepo userRepo;
     private final AddressRepo addressRepo;
     private final OrderNotificationController orderNotificationController;
+    private final InvoiceService invoiceService;
+    private final InvoiceRepo invoiceRepo;
+    private final FileService fileService;
+    private final SellerRepo sellerRepo;
+    private final ProductRepo productRepo;
 
-    // ============================================================
-// PLACE ORDER  (Main Logic)
-// ============================================================
+    public BaseRs getOrders() {
+        List<OrderBO> list = orderRepo.findAll();
+        return ResponseUtils.success(
+                new OrderDataRsList("Orders loaded",
+                        OrderMapper.mapToOrderRsList(list, fileService))
+        );
+    }
+
     @Override
     @Transactional
     public BaseRs placeOrder(OrderRq rq) throws Exception {
 
         Long userId = AuthUtils.findLoggedInUser().getDocId();
-        if (userId == null) {
-            throw new RuntimeException("User not authenticated");
-        }
-        log.info("Placing order for userId: {}", userId);
+        if (userId == null) throw new RuntimeException("User not authenticated");
 
         if (rq.getTotalCarts() == null || rq.getTotalCarts().isEmpty()) {
             throw new RuntimeException("Cart is empty");
@@ -60,7 +70,7 @@ public class OrderServiceImpl implements OrderService {
         long totalAmount = 0;
 
         // ------------------------------------------------------------
-        // Build the cart list + validate stock + update quantity
+        // BUILD CART LIST + VALIDATE STOCK
         // ------------------------------------------------------------
         for (Map.Entry<String, Integer> entry : rq.getTotalCarts().entrySet()) {
 
@@ -70,30 +80,30 @@ public class OrderServiceImpl implements OrderService {
             CartBO cartBO = cartRepo.findById(cartId)
                     .orElseThrow(() -> new RuntimeException("Invalid cart ID: " + cartId));
 
+            ProductBO product = cartBO.getProduct();
+            if (product == null) throw new RuntimeException("Product missing for cart ID: " + cartId);
+
+            int available = product.getStock() == null ? 0 : product.getStock();
             int qtyToUse = qtyRequested > 0 ? qtyRequested : cartBO.getQuantity();
 
-            if (cartBO.getTotalitem() < qtyToUse) {
-                throw new RuntimeException("Insufficient stock for product: " + cartBO.getPname());
+            if (available < qtyToUse) {
+                throw new RuntimeException("Insufficient stock for: " + product.getName());
             }
 
             // Reduce stock
-            cartBO.setTotalitem(cartBO.getTotalitem() - qtyToUse);
-            cartBO.setSolditem(cartBO.getSolditem() + qtyToUse);
+            product.setStock(available - qtyToUse);
+            product.updateLowStock();
+            productRepo.save(product);
 
-            // Freeze quantity snapshot for invoice
+            // Freeze quantity for invoice
             cartBO.setQuantity(qtyToUse);
 
-            // Add to order
             totalAmount += cartBO.getPrice() * qtyToUse;
             cartItems.add(cartBO);
         }
 
-        if (cartItems.isEmpty()) {
-            throw new RuntimeException("Cart is empty");
-        }
-
         // ------------------------------------------------------------
-        // Save shipping address
+        // SAVE SHIPPING ADDRESS
         // ------------------------------------------------------------
         AddressBO address = new AddressBO();
         address.setFullName(rq.getFullName());
@@ -107,81 +117,65 @@ public class OrderServiceImpl implements OrderService {
         addressRepo.save(address);
 
         // ------------------------------------------------------------
-        // Disable ordered items
+        // DISABLE ORDERED CART ITEMS
         // ------------------------------------------------------------
-        for (CartBO item : cartItems) {
-            item.setEnabled(false);
-        }
+        for (CartBO item : cartItems) item.setEnabled(false);
         cartRepo.saveAll(cartItems);
-        cartRepo.flush();
 
-        // ------------------------------------------------------------
-        // REMOVE ordered items from user's Add-To-Cart (corrected)
-        // ------------------------------------------------------------
+        // Remove from user's Add-To-Cart
         UserBO user = userRepo.findById(userId).orElseThrow();
-
-        user.getAddtoCart().removeIf(
-                c -> cartItems.stream().anyMatch(o -> o.getId().equals(c.getId()))
-        );
-
+        user.getAddtoCart().removeIf(c -> cartItems.stream().anyMatch(o -> o.getId().equals(c.getId())));
         userRepo.save(user);
 
         // ------------------------------------------------------------
-        // Create OrderBO
+        // CREATE ORDER
         // ------------------------------------------------------------
         OrderBO order = new OrderBO();
-        userRepo.findById(userId).ifPresent(order::setUser);
-
+        order.setUser(user);
         order.setOrderStatus("INITIAL");
-        order.setPaymentMethod(rq.getPaymentMethod() == null ? "UNKNOWN" : rq.getPaymentMethod().toUpperCase());
+        order.setPaymentMethod(
+                rq.getPaymentMethod() == null ? "UNKNOWN" : rq.getPaymentMethod().toUpperCase()
+        );
         order.setOrderTime(LocalDateTime.now());
         order.setTotalAmount(totalAmount);
         order.setShippingAddress(address);
         order.setCartItems(cartItems);
 
-        // Vendor tracking
-        List<Long> vendorIds = cartItems.stream()
-                .map(CartBO::getCartempid)
-                .filter(Objects::nonNull)
-                .distinct()
-                .collect(Collectors.toList());
-        order.setCartempids(vendorIds);
+        // Seller for order (first product seller)
+        SellerBO seller = findSellerFromOrder(order);
 
         // Invoice number
-        String invoiceNo = "AIM" +
-                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+        String invoiceNo = "AIM" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
         order.setInvoiceno(invoiceNo);
 
         orderRepo.save(order);
 
         // ------------------------------------------------------------
-        // GENERATE INVOICE PDF
+        // GENERATE AND STORE PDF
         // ------------------------------------------------------------
-        try {
-            Path pdfPath = invoiceGenerator.generateInvoicePdf(order);
-            log.info("PDF generated at: {}", pdfPath);
-        } catch (Exception e) {
-            log.warn("Invoice generation failed for order {}: {}", order.getId(), e.getMessage());
-        }
+        String html = invoiceService.downloadInvoiceHtml(order.getId());
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        HtmlConverter.convertToPdf(html, out);
+        byte[] pdfBytes = out.toByteArray();
+
+        FileBO pdfFile = fileService.uploadBytes(pdfBytes, invoiceNo + ".pdf");
 
         // ------------------------------------------------------------
-        // Notify vendor(s)
+        // SAVE INVOICE ENTRY
         // ------------------------------------------------------------
-        try {
-            for (Long vId : vendorIds) {
-                orderNotificationController.notifyVendor(
-                        String.valueOf(vId),
-                        "You received a new order: " + invoiceNo
-                );
-            }
-        } catch (Exception e) {
-            log.warn("Notification failed: {}", e.getMessage());
-        }
+        InvoiceBO invoice = InvoiceBO.builder()
+                .order(order)
+                .user(order.getUser())
+                .invoiceNumber(invoiceNo)
+                .invoiceFileId(pdfFile.getId())
+                .build();
 
-        log.info("Order saved successfully with ID = {}", order.getId());
+
+        invoiceRepo.save(invoice);
 
         // ------------------------------------------------------------
-        // Response
+        // RESPONSE
         // ------------------------------------------------------------
         Map<String, Object> data = new HashMap<>();
         data.put("orderId", order.getId());
@@ -190,6 +184,7 @@ public class OrderServiceImpl implements OrderService {
 
         return ResponseUtils.success(data);
     }
+
 
 
 
@@ -226,4 +221,27 @@ public class OrderServiceImpl implements OrderService {
     public BaseRs retrieveOrdersCancel(String orderId) throws Exception {
         return ResponseUtils.success("Not implemented yet");
     }
+
+
+    /**
+     * Extract seller for this order.
+     * We don’t store sellerId in CartBO anymore.
+     * Seller now comes from ProductBO (product → seller).
+     * So we pick the seller of the first cart item.
+     * Works because one order = one seller in current design.
+     */
+    private SellerBO findSellerFromOrder(OrderBO order) {
+        if (order.getCartItems() == null || order.getCartItems().isEmpty())
+            return null;
+
+        CartBO cart = order.getCartItems().get(0);
+        ProductBO product = cart.getProduct();
+
+        if (product == null || product.getSeller() == null)
+            return null;
+
+        return product.getSeller();
+    }
+
+
 }

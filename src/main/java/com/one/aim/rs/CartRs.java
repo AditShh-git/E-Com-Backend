@@ -15,21 +15,18 @@ public class CartRs implements Serializable {
 
 	private static final long serialVersionUID = 1L;
 
-    private String docId;
-    private String pName;
+    private Long id;
+    private String pname;
     private String description;
-    private String category;
-    private long price;// legacy — contains discountedPrice for UI backwards compatibility
-    private long originalPrice;     // new — original DB price
-    private long discountedPrice;   // new — price after discount (if enabled)
-    private int offer;
-    private boolean varified;
-    private byte[] image;
-    private int totalItem;
-    private int soldItem;
-    private int quantity;
+    private long price;
 
-    public void setPName(String pName) { this.pName = pName; }
-    public String getPName() { return this.pName; }
+    private String category;
+
+    private int offer;
+    private int returnDay;
+
+    private int quantity; // user-selected qty
+
+    private String imageUrl; // generated from file service
 
 }

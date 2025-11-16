@@ -5,24 +5,13 @@ import com.one.vm.core.BaseRs;
 
 public interface CartService {
 
-	public BaseRs saveCart(CartRq rq) throws Exception;
+    BaseRs addProductToCart(Long productId) throws Exception;
 
-	public BaseRs addToCart(String cartIds) throws Exception;
+    BaseRs updateQuantity(Long cartId, int quantity) throws Exception;
 
-	public BaseRs retrieveCarts(int limit, int offset) throws Exception;
+    BaseRs removeFromCart(Long cartId) throws Exception;
 
-	public BaseRs retrieveAddToCarts() throws Exception;
+    BaseRs getMyCart() throws Exception;
 
-	public BaseRs retrieveCartsByCategory(String category);
-
-	public BaseRs retrieveCart(String id);
-
-	public BaseRs retrieveCartByEmpType();
-
-	public BaseRs retrieveCartsByAdmin();
-
-	public BaseRs searchCartsByPname(String pname, int offset, int limit);
-
-	public BaseRs deleteCart(String id) throws Exception;
-
+    BaseRs placeOrder() throws Exception;
 }

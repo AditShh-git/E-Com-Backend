@@ -157,5 +157,54 @@ public class EmailServiceImpl implements EmailService {
                 </html>
                 """.formatted(fullName, frontendUrl);
     }
+
+    // ===========================================================
+//  Seller → Email Verified & Under Review
+// ===========================================================
+    @Async
+    public void sendSellerUnderReviewEmail(String toEmail, String fullName) {
+
+        String subject = "Email Verified - Seller Account Under Review";
+        String html = """
+            <html><body style='font-family: Arial;'>
+            <h2>Hello %s,</h2>
+            <p>Your email has been successfully verified.</p>
+            <p>Your seller account is now <strong>under review</strong>. Our team will verify your documents and approve your account within 3–7 days.</p>
+            <br>
+            <p>Thanks,<br>Team OneAim</p>
+            </body></html>
+            """.formatted(fullName);
+
+        try {
+            sendHtmlEmail(toEmail, subject, html);
+        } catch (Exception e) {
+            log.error("Failed to send Seller Under Review email", e);
+        }
+    }
+
+    // ===========================================================
+//  Admin → Seller Approved Email
+// ===========================================================
+    @Async
+    public void sendSellerApprovalEmail(String toEmail, String fullName) {
+
+        String subject = "Congratulations! Your Seller Account is Approved 🎉";
+        String html = """
+            <html><body style='font-family: Arial;'>
+            <h2>Congratulations %s! 🎉</h2>
+            <p>Your seller account has been successfully verified and approved by the admin.</p>
+            <p>You can now log in and start selling your products on OneAim.</p>
+            <br>
+            <p>Best wishes,<br>Team OneAim</p>
+            </body></html>
+            """.formatted(fullName);
+
+        try {
+            sendHtmlEmail(toEmail, subject, html);
+        } catch (Exception e) {
+            log.error("Failed to send Seller Approval email", e);
+        }
+    }
+
 }
 
