@@ -56,7 +56,7 @@ public class OrderController {
     // ---------------------------------------------------------
     // GET ALL ORDERS (ADMIN)
     // ---------------------------------------------------------
-    @GetMapping
+    @GetMapping("/all")
     public ResponseEntity<?> getAllOrders() throws Exception {
         return ResponseEntity.ok(orderService.retrieveOrders());
     }
