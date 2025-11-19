@@ -29,6 +29,9 @@ public interface UserRepo extends JpaRepository<UserBO, Long> {
     Optional<Object> findByEmailIgnoreCase(String email);
 
     boolean existsByPhoneNo(String phoneNo);
+    
+    long countByRole(String role);
+
 
 //    Page<UserBO> findAll(Specification<UserBO> spec, Pageable pageable);
 }

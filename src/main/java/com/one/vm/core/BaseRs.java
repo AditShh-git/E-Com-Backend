@@ -1,6 +1,7 @@
 package com.one.vm.core;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.one.aim.rs.AdminDashboardRs;
 import com.one.constants.StringConstants;
 
 import lombok.Getter;

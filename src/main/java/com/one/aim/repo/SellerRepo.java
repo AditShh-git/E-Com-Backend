@@ -48,6 +48,8 @@ public interface SellerRepo extends JpaRepository<SellerBO, Long> {
     boolean existsByPanCard(String panCard);
 
     Optional<SellerBO> findBySellerId(String sellerId);
+    
+    long count();
 
 //    Page<SellerBO> findAll(Specification<SellerBO> spec, Pageable pageable);
 }

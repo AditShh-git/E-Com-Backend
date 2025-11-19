@@ -1,5 +1,6 @@
 package com.one.aim.repo;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -34,5 +35,20 @@ public interface OrderRepo extends JpaRepository<OrderBO, Long> {
     Optional<OrderBO> findByOrderId(String orderId);
 
 
+    //Dashboard
+    long count();
+    Long sumTotalAmountBy();
+    
+    @Query("SELECT SUM(o.totalAmount) FROM OrderBO o")
+    Long getTotalRevenue();
+    
+    @Query("SELECT FUNCTION('MONTH', o.createdAt), SUM(o.totalAmount) " +
+    	       "FROM OrderBO o WHERE o.createdAt >= :lastMonths GROUP BY FUNCTION('MONTH', o.createdAt)")
+    	List<Object[]> getRevenueByMonth(LocalDateTime lastMonths);
+
+    @Query("SELECT p.name, COUNT(o) FROM OrderBO o " +
+    	       "JOIN o.cartItems c JOIN c.product p " +
+    	       "GROUP BY p.name")
+    	List<Object[]> getOrderDistribution();
 
 }
