@@ -1,18 +1,19 @@
 package com.one.aim.service.impl;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
 
+import com.one.aim.rq.CreatePaymentRq;
+import com.one.aim.rq.VerifyPaymentRq;
+import com.one.aim.rs.CreatePaymentRs;
+import com.one.aim.rs.VerifyPaymentRs;
+import lombok.RequiredArgsConstructor;
 import org.json.JSONObject;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.one.aim.bo.OrderBO;
 import com.one.aim.bo.PaymentBO;
 import com.one.aim.bo.UserBO;
-import com.one.aim.constants.ErrorCodes;
-import com.one.aim.constants.MessageCodes;
 import com.one.aim.mapper.PaymentMapper;
 import com.one.aim.repo.OrderRepo;
 import com.one.aim.repo.PaymentRepo;
@@ -21,97 +22,169 @@ import com.one.aim.rq.PaymentRq;
 import com.one.aim.rs.PaymentRs;
 import com.one.aim.rs.data.PaymentDataRs;
 import com.one.aim.service.PaymentService;
-import com.one.constants.StringConstants;
 import com.one.utils.AuthUtils;
 import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
-import com.razorpay.Order;
 import com.razorpay.RazorpayClient;
-import com.razorpay.RazorpayException;
 
 import lombok.extern.slf4j.Slf4j;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class PaymentServiceImpl implements PaymentService {
 
-	@Autowired
-	UserRepo userRepo;
+    private final UserRepo userRepo;
+    private final PaymentRepo paymentRepo;
+    private final OrderRepo orderRepo;
 
-	@Autowired
-	PaymentRepo paymentRepo;
+    @Value("${razorpay.key_id}")
+    private String razorpayKeyId;
 
-	@Autowired
-	OrderRepo orderRepo;
+    @Value("${razorpay.key_secret}")
+    private String razorpayKeySecret;
 
-	@Value("${razorpay.key_id}")
-	private String razorpayKeyId;
+    // ============================================================
+    // 1. CREATE RAZORPAY ORDER
+    // ============================================================
+    @Override
+    public BaseRs createRazorpayOrder(CreatePaymentRq rq) throws Exception {
 
-	@Value("${razorpay.key_secret}")
-	private String razorpayKeySecret;
+        // Load order using BUSINESS orderId (ORD-XXXXXX)
+        OrderBO order = orderRepo.findByOrderId(rq.getOrderId())
+                .orElseThrow(() -> new RuntimeException("Order not found"));
 
-	@Override
-	public BaseRs processPayment(PaymentRq rq) throws Exception {
+        if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
+            return ResponseUtils.failure("COD_NOT_ALLOWED_FOR_ONLINE_PAYMENT");
+        }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing saveCompany(CompanyRq) ->");
-		}
+        Long amount = order.getTotalAmount(); // rupees
 
-		Long userId = AuthUtils.findLoggedInUser().getDocId();
-		String message = StringConstants.EMPTY;
-		UserBO userBO = null;
-		if (null != userId) { // UPDATE
-			Optional<UserBO> optUserBO = userRepo.findById(userId);
-			userBO = optUserBO.get();
-			if (userBO == null) {
-				log.error(ErrorCodes.EC_USER_NOT_FOUND);
-				return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND);
-			}
-		} else {
-			userBO = new UserBO(); // SAVE
-			message = MessageCodes.MC_SAVED_SUCCESSFUL;
-		}
-		PaymentBO paymentBO = new PaymentBO();
-		paymentBO.setAmount(Long.parseLong(rq.getAmount()));
-		paymentBO.setPaymentMethod(rq.getPaymentMethod());
-		paymentBO.setPaymentTime(LocalDateTime.now());
-		paymentBO.setUser(userBO);
-		paymentRepo.save(paymentBO);
-		PaymentRs paymentRs = PaymentMapper.mapToPaymentRs(paymentBO);
-		return ResponseUtils.success(new PaymentDataRs(message, paymentRs));
-	}
+        RazorpayClient razorpay = new RazorpayClient(razorpayKeyId, razorpayKeySecret);
 
-	public String makePayment(int amount, String currency, String receiptId, String orderId) throws RazorpayException {
-		Optional<OrderBO> optOrderBO = orderRepo.findById(Long.valueOf(orderId));
-		if (optOrderBO.isEmpty()) {
-			log.error(ErrorCodes.EC_ORDER_NOT_FOUND);
-			return ErrorCodes.EC_ORDER_NOT_FOUND;
-		}
+        JSONObject options = new JSONObject();
+        options.put("amount", amount * 100);   // paise
+        options.put("currency", "INR");
+        options.put("receipt", order.getOrderId());
 
-		RazorpayClient razorpayClient = new RazorpayClient(razorpayKeyId, razorpayKeySecret);
-		JSONObject orderRequest = new JSONObject();
-		orderRequest.put("amount", amount * 100);
-		orderRequest.put("currency", currency);
-		orderRequest.put("receipt", receiptId);
+        com.razorpay.Order razorpayOrder = razorpay.orders.create(options);
 
-		Order razorpayOrder = razorpayClient.orders.create(orderRequest);
+        String razorpayOrderId = razorpayOrder.get("id");
 
-		OrderBO orderBO = optOrderBO.get();
-		orderBO.setRazorpayorderid(razorpayOrder.get("id").toString()); // convert to string
-		orderBO.setPaymentStatus("CREATED");
-		orderRepo.save(orderBO);
+        // Save details in DB
+        order.setRazorpayorderid(razorpayOrderId);
+        order.setPaymentStatus("CREATED");
+        orderRepo.save(order);
 
-		JSONObject response = new JSONObject();
-		response.put("amount", ((Number) razorpayOrder.get("amount")).longValue());
-		response.put("status", orderBO.getPaymentStatus());
+        CreatePaymentRs data = new CreatePaymentRs(
+                razorpayOrderId,
+                amount * 100,
+                "INR",
+                razorpayKeyId,
+                order.getOrderId()
+        );
 
-		return response.toString();
-	}
+        return ResponseUtils.success(data);
+    }
 
-//	public String getPaymentStatus(String paymentId) throws Exception {
-//		RazorpayClient razorpay = new RazorpayClient(razorpayKeyId, razorpayKeySecret);
-//		Payment payment = razorpay.payments.fetch(paymentId);
-//		return payment.get("status"); // "captured", "failed", "authorized", etc.
-//	}
+    // ============================================================
+    // 2. VERIFY PAYMENT SIGNATURE
+    // ============================================================
+    @Override
+    public BaseRs verifyRazorpayPayment(VerifyPaymentRq rq) throws Exception {
 
+        // Load order using business id (ORD-XXXXXX)
+        OrderBO order = orderRepo.findByOrderId(rq.getOrderId())
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        // ===========================
+        // Generate correct HEX HMAC
+        // ===========================
+        String payload = rq.getRazorpayOrderId() + "|" + rq.getRazorpayPaymentId();
+        String generatedSignature = hmacSHA256_HEX(payload, razorpayKeySecret);
+
+        log.info(" Payload Used          = {}", payload);
+        log.info(" Generated Signature   = {}", generatedSignature);
+        log.info(" Client Signature Sent = {}", rq.getRazorpaySignature());
+
+
+        // ===========================
+        // Compare signatures
+        // ===========================
+        if (!generatedSignature.equals(rq.getRazorpaySignature())) {
+            order.setPaymentStatus("FAILED");
+            orderRepo.save(order);
+
+            return ResponseUtils.failure("PAYMENT_VERIFICATION_FAILED");
+        }
+
+        // ===========================
+        // Payment Successful
+        // ===========================
+        order.setPaymentStatus("PAID");
+        order.setRazorpayPaymentId(rq.getRazorpayPaymentId());
+        order.setRazorpaySignature(rq.getRazorpaySignature());
+        orderRepo.save(order);
+
+        // Save payment entry
+        PaymentBO payment = new PaymentBO();
+        payment.setAmount(order.getTotalAmount());
+        payment.setPaymentMethod(order.getPaymentMethod());
+        payment.setPaymentTime(LocalDateTime.now());
+        payment.setUser(order.getUser());
+        payment.setOrder(order);
+        payment.setStatus("PAID");
+        payment.setRazorpayOrderId(rq.getRazorpayOrderId());
+        payment.setRazorpayPaymentId(rq.getRazorpayPaymentId());
+        paymentRepo.save(payment);
+
+        VerifyPaymentRs rs = new VerifyPaymentRs(order.getOrderId(), "PAID");
+        return ResponseUtils.success(rs);
+    }
+
+    // ===========================
+    // Razorpay uses HEX HMAC!
+    // ===========================
+    private String hmacSHA256_HEX(String data, String key) throws Exception {
+        Mac sha256 = Mac.getInstance("HmacSHA256");
+        SecretKeySpec secretKey = new SecretKeySpec(key.getBytes(), "HmacSHA256");
+        sha256.init(secretKey);
+
+        byte[] hash = sha256.doFinal(data.getBytes());
+
+        StringBuilder hex = new StringBuilder();
+        for (byte b : hash) {
+            hex.append(String.format("%02x", b));
+        }
+        return hex.toString();
+    }
+
+    // ============================================================
+    // OLD PROCESS PAYMENT (IGNORE)
+    // ============================================================
+    @Override
+    public BaseRs processPayment(PaymentRq rq) throws Exception {
+        Long userId = AuthUtils.findLoggedInUser().getDocId();
+        UserBO userBO = null;
+
+        if (userId != null) {
+            userBO = userRepo.findById(userId).orElseThrow();
+        } else {
+            userBO = new UserBO();
+        }
+
+        PaymentBO paymentBO = new PaymentBO();
+        paymentBO.setAmount(Long.parseLong(rq.getAmount()));
+        paymentBO.setPaymentMethod(rq.getPaymentMethod());
+        paymentBO.setPaymentTime(LocalDateTime.now());
+        paymentBO.setUser(userBO);
+
+        paymentRepo.save(paymentBO);
+
+        PaymentRs paymentRs = PaymentMapper.mapToPaymentRs(paymentBO);
+        return ResponseUtils.success(new PaymentDataRs("", paymentRs));
+    }
 }

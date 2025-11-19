@@ -15,6 +15,7 @@ import com.one.aim.service.EmailService;
 import com.one.security.jwt.JwtUtils;
 import com.one.service.impl.UserDetailsImpl;
 import com.one.utils.AuthUtils;
+import com.one.utils.Utils;
 import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 import lombok.RequiredArgsConstructor;
@@ -95,6 +96,7 @@ public class AuthServiceImpl implements AuthService {
         if ("SELLER".equals(user.getRole())) {
             SellerBO seller = sellerRepo.findById(user.getId()).orElse(null);
 
+//            rs.setEmpId(seller.getId());
             rs.setSellerId(seller.getSellerId());  // <-------- SELLER ID FIELD
             rs.setUsername(seller.getEmail());
             rs.setFullname(seller.getFullName());
@@ -282,14 +284,100 @@ public class AuthServiceImpl implements AuthService {
     }
 
 
-
-    // ============================================================
-    // VERIFY EMAIL (DELEGATED)
-    // ============================================================
     @Override
     @Transactional
     public BaseRs verifyEmail(String token, String email) {
-        return emailService.verifyEmail(token, email);
+
+        // --------------------------------------
+        // USER
+        // --------------------------------------
+        Optional<UserBO> userOpt = userRepo.findByVerificationToken(token);
+        if (userOpt.isPresent()) {
+
+            UserBO user = userOpt.get();
+
+            if (isExpired(user.getVerificationTokenExpiry()))
+                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
+
+            // If email was updated → apply pendingEmail
+            if (user.getPendingEmail() != null) {
+                user.setEmail(user.getPendingEmail());
+                user.setPendingEmail(null);
+            }
+
+            user.setEmailVerified(true);
+            user.setActive(true);
+
+            user.setVerificationToken(null);
+            user.setVerificationTokenExpiry(null);
+
+            userRepo.save(user);
+
+            return ResponseUtils.success("Email verified successfully.");
+        }
+
+
+        // --------------------------------------
+        // SELLER
+        // --------------------------------------
+        Optional<SellerBO> sellerOpt = sellerRepo.findByVerificationToken(token);
+        if (sellerOpt.isPresent()) {
+
+            SellerBO seller = sellerOpt.get();
+
+            if (isExpired(seller.getVerificationTokenExpiry()))
+                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
+
+            // email update
+            if (seller.getPendingEmail() != null) {
+                seller.setEmail(seller.getPendingEmail());
+                seller.setPendingEmail(null);
+            }
+
+            seller.setEmailVerified(true);
+            seller.setLocked(false);        // can login
+            seller.setVerified(false);      // admin approval required
+
+            seller.setVerificationToken(null);
+            seller.setVerificationTokenExpiry(null);
+
+            sellerRepo.save(seller);
+
+            emailService.sendSellerUnderReviewEmail(seller.getEmail(), seller.getFullName());
+
+            return ResponseUtils.success(
+                    "Seller email verified. You can login. Admin approval required for product operations."
+            );
+        }
+
+
+        // --------------------------------------
+        // ADMIN
+        // --------------------------------------
+        Optional<AdminBO> adminOpt = adminRepo.findByVerificationToken(token);
+        if (adminOpt.isPresent()) {
+
+            AdminBO admin = adminOpt.get();
+
+            if (isExpired(admin.getVerificationTokenExpiry()))
+                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
+
+            admin.setEmailVerified(true);
+            admin.setActive(true);
+
+            admin.setVerificationToken(null);
+            admin.setVerificationTokenExpiry(null);
+
+            adminRepo.save(admin);
+
+            return ResponseUtils.success("Admin email verified successfully.");
+        }
+
+
+        // --------------------------------------
+        // NOT FOUND
+        // --------------------------------------
+        return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND, "Email not registered.");
     }
 
 

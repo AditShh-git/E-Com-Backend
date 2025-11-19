@@ -140,6 +140,15 @@ public class WebSecurityConfig {
                         ).permitAll()
 
                         // ======================================
+                        // PUBLIC RAZORPAY TEST ROUTES
+                        // ======================================
+                        .requestMatchers(
+                                "/razorpay-test.html",
+                                "/api/payment/create",
+                                "/api/payment/verify"
+                        ).permitAll()
+
+                        // ======================================
                         // PUBLIC BROWSING ROUTES
                         // ======================================
                         .requestMatchers(
@@ -149,7 +158,7 @@ public class WebSecurityConfig {
                         ).permitAll()
 
                         // ======================================
-                        // USER (MUST BE AUTHENTICATED)
+                        // USER ROUTES
                         // ======================================
                         .requestMatchers(
                                 "/api/cart/**",
@@ -184,6 +193,7 @@ public class WebSecurityConfig {
 
         return http.build();
     }
+
 
 
 

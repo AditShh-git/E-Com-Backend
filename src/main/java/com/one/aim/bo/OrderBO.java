@@ -38,7 +38,6 @@ public class OrderBO {
     private String orderId;
 
     private Long totalAmount;
-    private String paymentMethod;   // COD, UPI, CARD
     private LocalDateTime orderTime;
 
     private String orderStatus;     // INITIAL, CONFIRMED, SHIPPED, DELIVERED
@@ -64,9 +63,14 @@ public class OrderBO {
     private DeliveryPersonBO deliveryPerson;
 
     private String deliveryStatus;
-    private String paymentStatus;
 
+    private String paymentMethod;   // COD, UPI, CARD
+    private String paymentStatus;
+    private String razorpayPaymentId;
+    private String razorpaySignature;
     private String razorpayorderid;
+
+
     private String invoiceno;
 
     @CreationTimestamp

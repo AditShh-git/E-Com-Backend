@@ -28,4 +28,7 @@ public interface AdminRepo extends JpaRepository<AdminBO, Long> {
 
     boolean existsByPhoneNo(String phoneNo);
 
+    Optional<AdminBO> findByVerificationToken(String token);
+
+//    Optional<AdminBO> findByVerificationToken(String token);
 }

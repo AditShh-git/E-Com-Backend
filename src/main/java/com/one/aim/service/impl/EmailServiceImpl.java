@@ -56,106 +56,126 @@ public class EmailServiceImpl implements EmailService {
     }
 
 
-
-    // ===========================================================
-    // VERIFY EMAIL (User + Seller + Admin)
-    // ===========================================================
-    @Override
-    @Transactional
-    public BaseRs verifyEmail(String token, String email) {
-
-        String cleanEmail = email.trim().toLowerCase();
-
-        // --------------------------------------
-        // USER
-        // --------------------------------------
-        Optional<UserBO> userOpt = userRepo.findByEmail(cleanEmail);
-        if (userOpt.isPresent()) {
-            UserBO user = userOpt.get();
-
-            if (!token.equals(user.getVerificationToken()))
-                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN);
-
-            if (isExpired(user.getVerificationTokenExpiry()))
-                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
-
-            if (user.getPendingEmail() != null) {
-                user.setEmail(user.getPendingEmail());
-                user.setPendingEmail(null);
-            }
-
-            user.setEmailVerified(true);
-            user.setActive(true);
-            user.setVerificationToken(null);
-            user.setVerificationTokenExpiry(null);
-
-            userRepo.save(user);
-            return ResponseUtils.success("Email verified successfully.");
-        }
-
-
-        // --------------------------------------
-        // SELLER
-        // --------------------------------------
-        Optional<SellerBO> sellerOpt = sellerRepo.findByEmailIgnoreCase(cleanEmail);
-        if (sellerOpt.isPresent()) {
-
-            SellerBO seller = sellerOpt.get();
-
-            if (!token.equals(seller.getVerificationToken()))
-                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN);
-
-            if (isExpired(seller.getVerificationTokenExpiry()))
-                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
-
-            if (seller.getPendingEmail() != null) {
-                seller.setEmail(seller.getPendingEmail());
-                seller.setPendingEmail(null);
-            }
-
-            seller.setEmailVerified(true);
-            seller.setLocked(false); // can login now
-            seller.setVerified(false); // admin approval still needed
-
-            seller.setVerificationToken(null);
-            seller.setVerificationTokenExpiry(null);
-
-            sellerRepo.save(seller);
-
-            sendSellerUnderReviewEmail(seller.getEmail(), seller.getFullName());
-
-            return ResponseUtils.success(
-                    "Seller email verified. You can login. Admin approval required for product operations."
-            );
-        }
-
-
-        // --------------------------------------
-        // ADMIN
-        // --------------------------------------
-        Optional<AdminBO> adminOpt = adminRepo.findByEmailIgnoreCase(cleanEmail);
-        if (adminOpt.isPresent()) {
-
-            AdminBO admin = adminOpt.get();
-
-            if (!token.equals(admin.getVerificationToken()))
-                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN);
-
-            if (isExpired(admin.getVerificationTokenExpiry()))
-                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
-
-            admin.setEmailVerified(true);
-            admin.setActive(true);
-            admin.setVerificationToken(null);
-            admin.setVerificationTokenExpiry(null);
-
-            adminRepo.save(admin);
-
-            return ResponseUtils.success("Admin email verified successfully.");
-        }
-
-        return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND, "Email not registered.");
-    }
+//
+//    // ===========================================================
+//    // VERIFY EMAIL (User + Seller + Admin)
+//    // ===========================================================
+//    @Override
+//    @Transactional
+//    public BaseRs verifyEmail(String token, String email) {
+//
+//        String cleanEmail = email.trim().toLowerCase();
+//
+//        // ============================================================
+//        // USER VERIFICATION
+//        // ============================================================
+//        Optional<UserBO> userOpt = userRepo.findByEmail(cleanEmail);
+//        if (userOpt.isPresent()) {
+//            UserBO user = userOpt.get();
+//
+//            if (!token.equals(user.getVerificationToken()))
+//                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN);
+//
+//            if (isExpired(user.getVerificationTokenExpiry()))
+//                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
+//
+//            if (user.getPendingEmail() != null) {
+//                user.setEmail(user.getPendingEmail());
+//                user.setPendingEmail(null);
+//            }
+//
+//            user.setEmailVerified(true);
+//            user.setActive(true);
+//            user.setVerificationToken(null);
+//            user.setVerificationTokenExpiry(null);
+//
+//            userRepo.save(user);
+//            return ResponseUtils.success("Email verified successfully.");
+//        }
+//
+//
+//        // ============================================================
+//        // SELLER VERIFICATION (SIGNUP vs EMAIL-UPDATE)
+//        // ============================================================
+//        Optional<SellerBO> sellerOpt = sellerRepo.findByEmailIgnoreCase(cleanEmail);
+//        if (sellerOpt.isPresent()) {
+//
+//            SellerBO seller = sellerOpt.get();
+//
+//            if (!token.equals(seller.getVerificationToken()))
+//                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN);
+//
+//            if (isExpired(seller.getVerificationTokenExpiry()))
+//                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
+//
+//
+//            boolean isEmailUpdate = seller.getPendingEmail() != null;
+//
+//            // --------------------------------------------
+//            // CASE 1: EMAIL UPDATE (NO under-review email)
+//            // --------------------------------------------
+//            if (isEmailUpdate) {
+//
+//                seller.setEmail(seller.getPendingEmail());
+//                seller.setPendingEmail(null);
+//
+//                seller.setEmailVerified(true);
+//                seller.setVerificationToken(null);
+//                seller.setVerificationTokenExpiry(null);
+//
+//                sellerRepo.save(seller);
+//
+//                return ResponseUtils.success("Seller email updated & verified successfully.");
+//            }
+//
+//            // --------------------------------------------
+//            // CASE 2: SIGNUP VERIFICATION (UNDER REVIEW)
+//            // --------------------------------------------
+//            seller.setEmailVerified(true);
+//            seller.setLocked(false);      // can login
+//            seller.setVerified(false);    // awaiting admin approval
+//
+//            seller.setVerificationToken(null);
+//            seller.setVerificationTokenExpiry(null);
+//
+//            sellerRepo.save(seller);
+//
+//            // send under-review mail ONLY on signup
+//            sendSellerUnderReviewEmail(seller.getEmail(), seller.getFullName());
+//
+//            return ResponseUtils.success(
+//                    "Seller signup verified. You can log in now. Admin approval required for product actions."
+//            );
+//        }
+//
+//
+//        // ============================================================
+//        // ADMIN VERIFICATION
+//        // ============================================================
+//        Optional<AdminBO> adminOpt = adminRepo.findByEmailIgnoreCase(cleanEmail);
+//        if (adminOpt.isPresent()) {
+//
+//            AdminBO admin = adminOpt.get();
+//
+//            if (!token.equals(admin.getVerificationToken()))
+//                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN);
+//
+//            if (isExpired(admin.getVerificationTokenExpiry()))
+//                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
+//
+//            admin.setEmailVerified(true);
+//            admin.setActive(true);
+//            admin.setVerificationToken(null);
+//            admin.setVerificationTokenExpiry(null);
+//
+//            adminRepo.save(admin);
+//
+//            return ResponseUtils.success("Admin email verified successfully.");
+//        }
+//
+//        return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND, "Email not registered.");
+//    }
+//
 
 
 

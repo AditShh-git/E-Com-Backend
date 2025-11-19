@@ -102,4 +102,6 @@ public class AdminBO {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
+
+
 }

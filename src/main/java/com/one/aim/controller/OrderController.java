@@ -1,8 +1,11 @@
 package com.one.aim.controller;
 
 import com.one.aim.bo.OrderBO;
+import com.one.aim.mapper.OrderMapper;
 import com.one.aim.repo.OrderRepo;
+import com.one.aim.service.FileService;
 import com.one.utils.AuthUtils;
+import com.one.vm.utils.ResponseUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -35,6 +38,7 @@ public class OrderController {
 
     private final OrderService orderService;
     private final OrderRepo orderRepo;
+    private final FileService fileService;
 
     // ---------------------------------------------------------
     // PLACE ORDER (USER)
@@ -47,10 +51,16 @@ public class OrderController {
     // ---------------------------------------------------------
     // GET SINGLE ORDER
     // ---------------------------------------------------------
-    @GetMapping("/{id}")
-    public ResponseEntity<?> getOrder(@PathVariable long id) throws Exception {
-        return ResponseEntity.ok(orderService.retrieveOrder(id));
+    @GetMapping("/{orderId}")
+    public ResponseEntity<?> getOrderByOrderId(@PathVariable String orderId) throws Exception {
+        OrderBO order = orderRepo.findByOrderId(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        return ResponseEntity.ok(
+                ResponseUtils.success(OrderMapper.mapToOrderRs(order, fileService))
+        );
     }
+
 
     // ---------------------------------------------------------
     // GET ALL ORDERS (ADMIN)
@@ -93,8 +103,9 @@ public class OrderController {
     // ---------------------------------------------------------
     @DeleteMapping("/cancel/{orderId}")
     public ResponseEntity<?> cancelOrder(@PathVariable String orderId) throws Exception {
-        return ResponseEntity.ok(orderService.retrieveOrdersCancel(orderId));
+        return ResponseEntity.ok(orderService.cancelOrder(orderId));
     }
+
 
     // ---------------------------------------------------------
     // DOWNLOAD INVOICE (SECURED)

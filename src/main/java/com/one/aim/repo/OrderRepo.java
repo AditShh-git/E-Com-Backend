@@ -35,6 +35,7 @@ public interface OrderRepo extends JpaRepository<OrderBO, Long> {
     Optional<OrderBO> findByOrderId(String orderId);
 
 
+<<<<<<< HEAD
     //Dashboard
     long count();
     Long sumTotalAmountBy();
@@ -51,4 +52,7 @@ public interface OrderRepo extends JpaRepository<OrderBO, Long> {
     	       "GROUP BY p.name")
     	List<Object[]> getOrderDistribution();
 
+=======
+    List<OrderBO> findAllByUserIdOrderByOrderTimeDesc(Long userId);
+>>>>>>> 9dd4e92 (Implement payment integration)
 }
