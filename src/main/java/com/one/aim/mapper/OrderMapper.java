@@ -19,46 +19,33 @@ public class OrderMapper {
 
     public static OrderRs mapToOrderRs(OrderBO bo, FileService fileService) {
 
-        if (log.isDebugEnabled()) {
-            log.debug("Executing mapToOrderRs(OrderBO) ->");
+        if (bo == null) return null;
+
+        OrderRs rs = new OrderRs();
+        rs.setDocId(String.valueOf(bo.getId()));
+        rs.setOrderId(bo.getOrderId());
+
+        long totalAmount = 0;
+
+        if (Utils.isNotEmpty(bo.getCartItems())) {
+            rs.setOrderedItems(
+                    CartMapper.mapToCartRsList(bo.getCartItems(), fileService)
+            );
+
+            for (CartBO cartBO : bo.getCartItems()) {
+                totalAmount += cartBO.getPrice() * cartBO.getQuantity();
+            }
         }
 
-        try {
-            if (bo == null) {
-                log.warn("OrderBO is NULL");
-                return null;
-            }
+        rs.setTotalAmount(totalAmount);
+        rs.setOrderTime(bo.getOrderTime());
+        rs.setPaymentMethod(bo.getPaymentMethod());
+        rs.setUser(UserMapper.mapToUserRs(bo.getUser()));
+        rs.setOrderStatus(bo.getOrderStatus());
 
-            OrderRs rs = new OrderRs();
-
-            rs.setDocId(String.valueOf(bo.getId()));
-
-            long totalAmount = 0;
-
-            if (Utils.isNotEmpty(bo.getCartItems())) {
-
-                rs.setOrderedItems(
-                        CartMapper.mapToCartRsList(bo.getCartItems(), fileService)
-                );
-
-                for (CartBO cartBO : bo.getCartItems()) {
-                    totalAmount += cartBO.getPrice() * cartBO.getQuantity();
-                }
-            }
-
-            rs.setTotalAmount(totalAmount);
-            rs.setOrderTime(bo.getOrderTime());
-            rs.setPaymentMethod(bo.getPaymentMethod());
-            rs.setUser(UserMapper.mapToUserRs(bo.getUser()));
-            rs.setOrderStatus(bo.getOrderStatus());
-
-            return rs;
-
-        } catch (Exception e) {
-            log.error("Exception in mapToOrderRs(OrderBO) - " + e);
-            return null;
-        }
+        return rs;
     }
+
 
 
     public static List<OrderRs> mapToOrderRsList(List<OrderBO> bos, FileService fileService) {

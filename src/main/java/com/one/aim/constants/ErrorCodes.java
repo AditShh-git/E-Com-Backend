@@ -151,6 +151,9 @@ public class ErrorCodes {
     // Unauthorized actions
     public static final String EC_UNAUTHORIZED = "EC_UNAUTHORIZED";
 
+    public static final String EC_SELLER_APPROVAL_REQUIRED = "EC_SELLER_APPROVAL_REQUIRED";
+
+
 
 
     // ============================================================

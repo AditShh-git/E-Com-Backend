@@ -2,6 +2,7 @@ package com.one.aim.service;
 
 import com.one.aim.bo.AdminSettingsBO;
 import com.one.aim.bo.SellerBO;
+import com.one.aim.rs.SellerRs;
 
 import java.util.List;
 import java.util.Map;
@@ -17,9 +18,9 @@ public interface AdminSettingService {
 
     String verifySeller(Long sellerId, Boolean status);
 
-    List<SellerBO> getUnverifiedSellers();
+    List<SellerRs> getUnverifiedSellers();
+    List<SellerRs> getVerifiedSellers();
 
-    List<SellerBO> getVerifiedSellers();
 
     int getGlobalDiscount();
     boolean isDiscountEngineEnabled();

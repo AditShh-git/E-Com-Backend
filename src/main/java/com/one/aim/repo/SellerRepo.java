@@ -3,6 +3,9 @@ package com.one.aim.repo;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -36,4 +39,15 @@ public interface SellerRepo extends JpaRepository<SellerBO, Long> {
 
     //  Find seller by email verification token
     Optional<SellerBO> findByVerificationToken(String token);
+
+    boolean existsByPhoneNo(String phoneNo);
+
+
+    boolean existsByGst(String gst);
+    boolean existsByAdhaar(String adhaar);
+    boolean existsByPanCard(String panCard);
+
+    Optional<SellerBO> findBySellerId(String sellerId);
+
+//    Page<SellerBO> findAll(Specification<SellerBO> spec, Pageable pageable);
 }

@@ -43,7 +43,7 @@ public class ProductMapper {
         // Product images
         if (bo.getImageFileIds() != null && !bo.getImageFileIds().isEmpty()) {
             List<String> urls = bo.getImageFileIds().stream()
-                    .map(id -> "/api/files/" + id + "/view")
+                    .map(id -> "/api/files/public/" + id + "/view")
                     .toList();
             rs.setImageUrls(urls);
         }

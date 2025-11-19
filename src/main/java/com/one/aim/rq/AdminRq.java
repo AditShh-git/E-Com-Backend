@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import org.springframework.web.multipart.MultipartFile;
 
 @Getter
 @Setter
@@ -30,5 +31,5 @@ public class AdminRq extends BaseVM {
 
 	// private List<AttachmentRq> elExemptionAtts = Collections.emptyList();
 
-	private byte[] image;
+	private MultipartFile image;
 }

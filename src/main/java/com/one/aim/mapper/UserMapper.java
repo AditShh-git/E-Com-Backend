@@ -13,65 +13,28 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class UserMapper {
 
-	public static UserRs mapToUserRs(UserBO bo) {
+    public static UserRs mapToUserRs(UserBO bo) {
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToUserRs(UserBO) ->");
-		}
+        UserRs rs = new UserRs();
 
-		try {
-			UserRs rs = null;
+        rs.setDocId(bo.getId());
+        rs.setFullName(bo.getFullName());
+        rs.setPhoneNo(bo.getPhoneNo());
+        rs.setEmail(bo.getEmail());
+        rs.setRoll(bo.getRole());
 
-			if (null == bo) {
-				log.warn("UserBO is NULL");
-				return rs;
-			}
-			rs = new UserRs();
-			rs.setDocId(bo.getId());
-			if (Utils.isNotEmpty(bo.getFullName())) {
-				rs.setFullName(bo.getFullName());
-			}
-			if (Utils.isNotEmpty(bo.getPhoneNo())) {
-				rs.setPhoneNo(bo.getPhoneNo());
-			}
-			if (Utils.isNotEmpty(bo.getEmail())) {
-				rs.setEmail(bo.getEmail());
-			}
-			rs.setRoll(bo.getRole());
-			// rs.setAtts(AttachmentMapper.mapToAttachmentRsList(bo.getAtts()));
-			if (bo.getImage() != null) {
-				rs.setImage(bo.getImage());
-			}
-			
-			//rs.setImageId(bo.getImageid());
-			return rs;
-		} catch (Exception e) {
-			log.error("Exception in mapToUserRs(UserBO) - " + e);
-			return null;
-		}
-	}
+        // NEW — convert fileId → URL
+        if (bo.getImageFileId() != null) {
+            rs.setImageUrl("/api/files/private/" + bo.getImageFileId() + "/view");
+        }
 
-	public static List<UserRs> mapToUserRsList(List<UserBO> bos) {
+        return rs;
+    }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToUserRsList(List<UserBO>) ->");
-		}
-
-		try {
-			List<UserRs> rsList = new ArrayList<>();
-
-			if (Utils.isEmpty(bos)) {
-				log.warn("List<UserBO> is NULL");
-				return null;
-			}
-			for (UserBO bo : bos) {
-				rsList.add(mapToUserRs(bo));
-			}
-			return rsList;
-		} catch (Exception e) {
-			log.error("Exception in mapToUserRsList(List<UserBO>) - " + e);
-			return null;
-		}
-	}
-
+    public static List<UserRs> mapToUserRsList(List<UserBO> bos) {
+        return bos.stream()
+                .map(UserMapper::mapToUserRs)
+                .toList();
+    }
 }
+

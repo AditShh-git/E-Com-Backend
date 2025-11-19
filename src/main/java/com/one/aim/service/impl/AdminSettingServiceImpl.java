@@ -2,8 +2,10 @@ package com.one.aim.service.impl;
 
 import com.one.aim.bo.AdminSettingsBO;
 import com.one.aim.bo.SellerBO;
+import com.one.aim.mapper.SellerMapper;
 import com.one.aim.repo.AdminSettingsRepo;
 import com.one.aim.repo.SellerRepo;
+import com.one.aim.rs.SellerRs;
 import com.one.aim.service.AdminSettingService;
 import com.one.aim.service.EmailService;
 import jakarta.annotation.PostConstruct;
@@ -80,7 +82,7 @@ public class AdminSettingServiceImpl implements AdminSettingService {
 
 
     // ===========================================
-// VERIFY SELLER
+// VERIFY SELLER (ADMIN APPROVAL)
 // ===========================================
     @Override
     public String verifySeller(Long sellerId, Boolean status) {
@@ -91,10 +93,11 @@ public class AdminSettingServiceImpl implements AdminSettingService {
         // =============== ADMIN APPROVES SELLER ===============
         if (status) {
 
-            // If seller was NOT verified before, and now admin approves
+            // Only approve if not approved previously
             if (!seller.isVerified()) {
-                seller.setVerified(true);
-                seller.setLocked(false);  // unlock after admin approval
+
+                seller.setVerified(true);   // Admin approved
+                seller.setLocked(false);    // Ensure seller can login & perform actions
 
                 // Send approval mail
                 emailService.sendSellerApprovalEmail(
@@ -106,38 +109,38 @@ public class AdminSettingServiceImpl implements AdminSettingService {
                 return "Seller approved successfully. Approval email sent.";
             }
 
-            // Already verified earlier
             return "Seller already verified.";
         }
 
-        // =============== ADMIN UNVERIFIES SELLER ===============
-        seller.setVerified(false);
-        seller.setLocked(true); // lock again
-        sellerRepo.save(seller);
+        // =============== ADMIN REJECTS/UNVERIFIES SELLER ===============
+        seller.setVerified(false);   // Admin removed approval
+        seller.setLocked(false);     //  Keep unlocked so seller can still login
 
-        return "Seller marked as unverified.";
+        // Seller CAN login → but cannot do any actions
+        // Your validateSellerAccess() already blocks actions when verified = false
+
+        sellerRepo.save(seller);
+        return "Seller marked as unverified. Seller can login but cannot perform actions.";
     }
 
 
-    // ===========================================
-// UNVERIFIED SELLERS
-// ===========================================
+
     @Override
-    public List<SellerBO> getUnverifiedSellers() {
+    public List<SellerRs> getUnverifiedSellers() {
         return sellerRepo.findAll().stream()
                 .filter(s -> !s.isVerified())
+                .map(SellerMapper::mapToSellerRs)
                 .collect(Collectors.toList());
     }
 
-    // ===========================================
-// VERIFIED SELLERS
-// ===========================================
     @Override
-    public List<SellerBO> getVerifiedSellers() {
+    public List<SellerRs> getVerifiedSellers() {
         return sellerRepo.findAll().stream()
                 .filter(SellerBO::isVerified)
+                .map(SellerMapper::mapToSellerRs)
                 .collect(Collectors.toList());
     }
+
 
     @Override
     public int getGlobalDiscount() {

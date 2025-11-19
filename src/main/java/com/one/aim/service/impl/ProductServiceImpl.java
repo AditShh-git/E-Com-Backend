@@ -50,12 +50,14 @@ public class ProductServiceImpl implements ProductService {
     public BaseRs addProduct(ProductRq rq) {
 
         try {
+            validateSellerAccess();   // KEEP AS IT IS
+
             List<String> errors = ProductHelper.validateProduct(rq);
             if (!errors.isEmpty()) {
                 return ResponseUtils.failure(ErrorCodes.EC_INVALID_INPUT, errors);
             }
 
-            Long sellerId = AuthUtils.findLoggedInUser().getDocId();
+            Long sellerId = AuthUtils.getLoggedUserId();
             SellerBO seller = sellerRepo.findById(sellerId).orElse(null);
 
             if (seller == null) {
@@ -74,8 +76,8 @@ public class ProductServiceImpl implements ProductService {
             if (rq.getImages() != null) {
                 for (MultipartFile file : rq.getImages()) {
                     if (!file.isEmpty()) {
-                        FileBO f = fileService.uploadAndReturnFile(file);
-                        bo.getImageFileIds().add(f.getId());
+                        FileBO uploaded = fileService.uploadAndReturnFile(file);
+                        bo.getImageFileIds().add(uploaded.getId());
                     }
                 }
             }
@@ -85,11 +87,16 @@ public class ProductServiceImpl implements ProductService {
             ProductRs rs = ProductMapper.mapToProductRs(bo, fileService);
             return ResponseUtils.success(new ProductDataRs("Product created successfully", rs));
         }
+        catch (RuntimeException ex) {
+
+            return ResponseUtils.failure("EC_ADMIN_APPROVAL_REQUIRED", ex.getMessage());
+        }
         catch (Exception e) {
             log.error("addProduct() failed", e);
             return ResponseUtils.failure(ErrorCodes.EC_INTERNAL_ERROR, e.getMessage());
         }
     }
+
 
     // ===========================================================
     // UPDATE PRODUCT
@@ -97,6 +104,8 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public BaseRs updateProduct(ProductRq rq) {
+
+        validateSellerAccess();  // REQUIRED
 
         try {
             if (rq.getDocId() == null) {
@@ -132,12 +141,15 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
+
     // ===========================================================
     // UPLOAD IMAGES
     // ===========================================================
     @Override
     @Transactional
     public BaseRs uploadProductImages(Long productId, List<MultipartFile> files) {
+
+        validateSellerAccess();  // REQUIRED
 
         try {
             ProductBO bo = productRepo.findById(productId).orElse(null);
@@ -170,8 +182,14 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
+
+    // ===========================================================
+    // GET PRODUCT IMAGES (SELLER ONLY)
+    // ===========================================================
     @Override
     public BaseRs getProductImages(Long productId) {
+
+        validateSellerAccess();  // REQUIRED
 
         try {
             if (productId == null || productId <= 0) {
@@ -185,7 +203,7 @@ public class ProductServiceImpl implements ProductService {
             }
 
             List<String> imageUrls = bo.getImageFileIds().stream()
-                    .map(id -> "/api/files/" + id + "/view")
+                    .map(id -> "/api/files/public/" + id + "/view")
                     .toList();
 
             return ResponseUtils.success(
@@ -205,6 +223,8 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public BaseRs deleteProductImage(Long productId, Long imageId) {
+
+        validateSellerAccess();  // REQUIRED
 
         try {
             ProductBO bo = productRepo.findById(productId).orElse(null);
@@ -231,8 +251,9 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
+
     // ===========================================================
-    // SHARE PRODUCT
+    // SHARE PRODUCT (PUBLIC)
     // ===========================================================
     @Override
     public String getShareableProduct(String slug) {
@@ -252,6 +273,7 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
+
     // ===========================================================
     // DELETE PRODUCT
     // ===========================================================
@@ -259,11 +281,18 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public BaseRs deleteProduct(Long productId) {
 
+        validateSellerAccess();  // REQUIRED
+
         try {
             ProductBO bo = productRepo.findById(productId).orElse(null);
 
             if (bo == null) {
                 return ResponseUtils.failure(ErrorCodes.EC_PRODUCT_NOT_FOUND, "Product not found");
+            }
+
+            Long sellerId = AuthUtils.getLoggedUserId();
+            if (!bo.getSeller().getId().equals(sellerId)) {
+                return ResponseUtils.failure(ErrorCodes.EC_UNAUTHORIZED, "Unauthorized action");
             }
 
             productRepo.delete(bo);
@@ -276,8 +305,9 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
+
     // ===========================================================
-    // LISTING / SEARCH
+    // PUBLIC LISTING / SEARCH (NO SELLER VALIDATION)
     // ===========================================================
     @Override
     public BaseRs listProducts(int offset, int limit) {
@@ -294,6 +324,7 @@ public class ProductServiceImpl implements ProductService {
             return ResponseUtils.failure(ErrorCodes.EC_INTERNAL_ERROR, e.getMessage());
         }
     }
+
 
     @Override
     public BaseRs getProductsByCategory(String category, int offset, int limit) {
@@ -344,8 +375,9 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
+
     // ===========================================================
-    // Helpers
+    // HELPERS
     // ===========================================================
     private String generateSlug(String name) {
         String base = name.toLowerCase()
@@ -366,4 +398,33 @@ public class ProductServiceImpl implements ProductService {
         return "Check out this product: " + product.getName()
                 + "\nhttp://localhost:8989/aimdev/api/public/product/" + product.getSlug();
     }
+
+    private SellerBO validateSellerAccess() {
+
+        Long id = AuthUtils.getLoggedUserId();
+        String role = AuthUtils.getLoggedUserRole();
+
+        if (!"SELLER".equalsIgnoreCase(role)) {
+            throw new RuntimeException("Only seller can access this resource.");
+        }
+
+        SellerBO seller = sellerRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Seller not found"));
+
+        if (!seller.isEmailVerified()) {
+            throw new RuntimeException("Please verify your email before performing this action.");
+        }
+
+        if (!seller.isVerified()) {
+            throw new RuntimeException("Your seller account is still pending admin approval.");
+        }
+
+        if (seller.isLocked()) {
+            throw new RuntimeException("Your seller account has been locked by admin.");
+        }
+
+        return seller;
+    }
+
 }
+

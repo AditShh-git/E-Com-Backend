@@ -38,7 +38,7 @@ public class CartBO {
     private boolean enabled = true;
 
     // seller reference for invoice
-    private Long sellerId;
+    private String sellerId;
 
     // The user who has this cart in their AddToCart
     @ManyToOne(fetch = FetchType.LAZY)

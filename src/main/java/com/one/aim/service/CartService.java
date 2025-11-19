@@ -13,5 +13,5 @@ public interface CartService {
 
     BaseRs getMyCart() throws Exception;
 
-    BaseRs placeOrder() throws Exception;
+//    BaseRs placeOrder() throws Exception;
 }

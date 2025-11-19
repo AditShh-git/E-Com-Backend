@@ -2,9 +2,12 @@ package com.one.aim.controller;
 
 import com.one.aim.bo.FileBO;
 import com.one.aim.bo.InvoiceBO;
+import com.one.aim.mapper.InvoiceMapper;
 import com.one.aim.repo.FileRepo;
 import com.one.aim.repo.InvoiceRepo;
 import com.one.aim.rq.UpdateRq;
+import com.one.aim.rq.UserFilterRequest;
+import com.one.aim.rs.InvoiceRs;
 import com.one.aim.service.AuthService;
 import com.one.aim.service.InvoiceService;
 import com.one.utils.AuthUtils;
@@ -29,6 +32,8 @@ import com.one.utils.Utils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.List;
 
 @RestController
 @RequestMapping(value = "/api/user")
@@ -71,11 +76,14 @@ public class UserController {
     // ===========================================================
     // GET ALL USERS (ADMIN ONLY)
     // ===========================================================
+    @PreAuthorize("hasAuthority('ADMIN')")
     @GetMapping("/all")
     public ResponseEntity<?> getAllUsers() throws Exception {
         log.debug("Executing [GET /api/user/all]");
         return ResponseEntity.ok(userService.retrieveAllUser());
     }
+
+
 
     // ===========================================================
     // DELETE USER (ADMIN ONLY)
@@ -117,29 +125,22 @@ public class UserController {
         return ResponseEntity.ok(userService.updateUserProfile(loggedEmail, rq));
     }
 
-//    // ===========================================================
-//    // DOWNLOAD INVOICE FOR USER
-//    // ===========================================================
-//    @GetMapping("/download/{orderId}")
-//    public ResponseEntity<byte[]> downloadInvoiceForUser(@PathVariable Long orderId) throws Exception {
-//
-//        InvoiceBO invoice = invoiceRepo.findByOrder_Id(orderId)
-//                .orElseThrow(() -> new RuntimeException("Invoice not found"));
-//
-//        FileBO file = fileRepo.findById(invoice.getInvoiceFileId())
-//                .orElseThrow(() -> new RuntimeException("Invoice PDF file missing"));
-//
-//        if (file.getInputstream() == null) {
-//            throw new RuntimeException("PDF content empty");
-//        }
-//
-//        HttpHeaders headers = new HttpHeaders();
-//        headers.setContentType(MediaType.APPLICATION_PDF);
-//        headers.setContentDisposition(ContentDisposition
-//                .attachment()
-//                .filename(invoice.getInvoiceNumber() + ".pdf")
-//                .build());
-//
-//        return new ResponseEntity<>(file.getInputstream(), headers, HttpStatus.OK);
-//    }
+// =====================================================================
+//  USER → Get invoices for logged-in user
+// =====================================================================
+@GetMapping("/invoice/all")
+public List<InvoiceRs> getUserInvoices() {
+
+    String role = AuthUtils.findLoggedInUser().getRoll();
+    Long userId = AuthUtils.findLoggedInUser().getDocId();
+
+    if (!"USER".equalsIgnoreCase(role)) {
+        throw new RuntimeException("Not allowed.");
+    }
+
+    return invoiceService.getInvoicesForUser(userId)
+            .stream()
+            .map(InvoiceMapper::toDto)
+            .toList();
+}
 }

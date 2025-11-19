@@ -2,8 +2,13 @@ package com.one.aim.controller;
 
 import com.one.aim.bo.InvoiceBO;
 import com.one.aim.bo.OrderBO;
+import com.one.aim.bo.SellerBO;
+import com.one.aim.mapper.InvoiceMapper;
 import com.one.aim.repo.InvoiceRepo;
+import com.one.aim.repo.SellerRepo;
 import com.one.aim.rq.LoginRq;
+import com.one.aim.rq.SellerFilterRequest;
+import com.one.aim.rs.InvoiceRs;
 import com.one.aim.service.InvoiceService;
 import com.one.utils.AuthUtils;
 import com.one.vm.utils.ResponseUtils;
@@ -41,7 +46,7 @@ public class SellerController {
 
     private final SellerService sellerService;
     private final InvoiceService invoiceService;
-    private final InvoiceRepo invoiceRepo;
+    private final SellerRepo  sellerRepo;
 
     // ===========================================================
     // SELLER SIGN-UP (multipart/form-data)
@@ -64,12 +69,14 @@ public class SellerController {
     // ===========================================================
     // GET ALL SELLERS (Admin only)
     // ===========================================================
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('ADMIN')")
     @GetMapping("/all")
     public ResponseEntity<?> retrieveSellers() throws Exception {
         log.debug("Executing [GET /api/seller/all]");
         return ResponseEntity.ok(sellerService.retrieveSellers());
     }
+
+
 
     // ===========================================================
     // LIST SELLER CARTS
@@ -83,62 +90,36 @@ public class SellerController {
     // ===========================================================
     // DELETE SELLER (Admin only)
     // ===========================================================
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteSeller(@PathVariable String id) throws Exception {
         log.debug("Executing [DELETE /api/seller/{}]", id);
         return ResponseEntity.ok(sellerService.deleteSeller(id));
     }
 
-//    // ===========================================================
-//    // DOWNLOAD INVOICE FOR SELLER
-//    // ===========================================================
-//    @GetMapping("/download/{orderId}")
-//    public ResponseEntity<byte[]> downloadInvoiceForSeller(@PathVariable Long orderId) throws Exception {
-//
-//        Long sellerId = AuthUtils.findLoggedInUser().getDocId();
-//
-//        InvoiceBO invoice = invoiceRepo.findByOrder_Id(orderId)
-//                .orElseThrow(() -> new RuntimeException("Invoice not found"));
-//
-//        if (!invoice.getSeller().getId().equals(sellerId)) {
-//            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-//                    .body("ACCESS_DENIED: You cannot access this invoice.".getBytes());
-//        }
-//
-//        byte[] pdfBytes = invoiceService.downloadInvoicePdf(orderId);
-//
-//        HttpHeaders headers = new HttpHeaders();
-//        headers.setContentType(MediaType.APPLICATION_PDF);
-//        headers.setContentDisposition(ContentDisposition
-//                .attachment()
-//                .filename("invoice-" + invoice.getInvoiceNumber() + ".pdf")
-//                .build());
-//
-//        return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
-//    }
 
-//    // ===========================================================
-//    // SELLER INVOICE LIST
-//    // ===========================================================
-//    @GetMapping("/all/invoices")
-//    public ResponseEntity<?> getSellerInvoices() {
-//
-//        Long sellerId = AuthUtils.findLoggedInUser().getDocId();
-//
-//        List<InvoiceBO> invoices = invoiceRepo.findAllBySeller_Id(sellerId);
-//
-//        List<Map<String, Object>> response = invoices.stream().map(inv -> {
-//            Map<String, Object> map = new HashMap<>();
-//            map.put("invoiceId", inv.getId());
-//            map.put("invoiceNo", inv.getInvoiceNumber());
-//            map.put("orderId", inv.getOrder().getId());
-//            map.put("amount", inv.getOrder().getTotalAmount());
-//            map.put("date", inv.getCreatedAt());
-//            map.put("downloadUrl", "/api/seller/download/" + inv.getOrder().getId());
-//            return map;
-//        }).collect(Collectors.toList());
-//
-//        return ResponseEntity.ok(response);
-//    }
+    // =====================================================================
+    //  SELLER → Get all invoices containing seller's products
+    // =====================================================================
+    @GetMapping("/invoice/all")
+    public List<InvoiceRs> getSellerInvoices() {
+
+        String role = AuthUtils.findLoggedInUser().getRoll();
+        Long sellerDbId = AuthUtils.findLoggedInUser().getDocId();
+
+        if (!"SELLER".equalsIgnoreCase(role)) {
+            throw new RuntimeException("Not allowed.");
+        }
+
+        SellerBO seller = sellerRepo.findById(sellerDbId)
+                .orElseThrow(() -> new RuntimeException("Seller not found."));
+
+        String sellerUniqueId = seller.getSellerId();
+
+        return invoiceService.getInvoicesForSeller(sellerUniqueId)
+                .stream()
+                .map(InvoiceMapper::toDto)
+                .toList();
+    }
+
 }

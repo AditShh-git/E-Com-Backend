@@ -1,6 +1,7 @@
 package com.one.aim.repo;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -29,6 +30,8 @@ public interface OrderRepo extends JpaRepository<OrderBO, Long> {
 
 
     OrderBO findByInvoiceno(String invoiceno);
+
+    Optional<OrderBO> findByOrderId(String orderId);
 
 
 

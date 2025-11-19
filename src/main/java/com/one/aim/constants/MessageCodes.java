@@ -33,6 +33,8 @@ public class MessageCodes {
     public static final String MC_NO_RECORDS_FOUND         = "MC_NO_RECORDS_FOUND";
     public static final String MC_SUCCESS                  = "MC_SUCCESS";
     public static final String MC_USER_INACTIVE            = "MC_USER_INACTIVE";
+    public static final String MC_SELLER_APPROVAL_REQUIRED = "MC_SELLER_APPROVAL_REQUIRED";
+
 
     // ============================================================
     // AUTHENTICATION

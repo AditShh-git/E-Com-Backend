@@ -1,7 +1,9 @@
 package com.one.aim.service.impl;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -9,15 +11,24 @@ import java.util.UUID;
 import com.one.aim.bo.FileBO;
 import com.one.aim.helper.SellerHelper;
 import com.one.aim.repo.UserRepo;
+import com.one.aim.rq.SellerFilterRequest;
 import com.one.aim.rq.UpdateRq;
+import com.one.aim.rs.SellerPageResponse;
 import com.one.aim.rs.data.*;
 import com.one.aim.service.AdminSettingService;
 import com.one.aim.service.EmailService;
+import com.one.exception.AppException;
 import com.one.security.jwt.JwtUtils;
 import com.one.service.impl.UserDetailsImpl;
+import com.one.utils.PhoneUtils;
 import com.one.utils.TokenUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -63,48 +74,73 @@ public class SellerServiceImpl implements SellerService {
     private final UserRepo userRepo;
 
     // ===========================================================
-    // SELLER SIGN-UP (ONLY SIGNUP) - Similar to User saveUser()
+    // SELLER SIGN-UP
     // ===========================================================
     @Override
     @Transactional
     public BaseRs saveSeller(SellerRq rq) throws Exception {
 
+        // -----------------------------------------
+        // VALIDATION
+        // -----------------------------------------
         List<String> errors = SellerHelper.validateSeller(rq, false);
         if (!errors.isEmpty()) {
             return ResponseUtils.failure("INVALID_INPUT", errors);
         }
 
         String email = rq.getEmail().trim().toLowerCase();
+        String phone = PhoneUtils.normalize(rq.getPhoneNo());
 
+        // -----------------------------------------
+        // GLOBAL EMAIL UNIQUE CHECK
+        // -----------------------------------------
         if (adminRepo.findByEmailIgnoreCase(email).isPresent()
                 || userRepo.findByEmailIgnoreCase(email).isPresent()
                 || sellerRepo.findByEmailIgnoreCase(email).isPresent()) {
-            return ResponseUtils.failure("EMAIL_EXISTS", "Email already registered with another account.");
+            return ResponseUtils.failure("EMAIL_EXISTS", "Email already registered.");
         }
 
+        // -----------------------------------------
+        // GLOBAL PHONE UNIQUE CHECK
+        // -----------------------------------------
+        boolean phoneExists =
+                sellerRepo.existsByPhoneNo(phone) ||
+                        adminRepo.existsByPhoneNo(phone) ||
+                        userRepo.existsByPhoneNo(phone);
 
+        if (phoneExists) {
+            return ResponseUtils.failure("PHONE_EXISTS", "Phone number already registered.");
+        }
+
+        // -----------------------------------------
+        // CREATE SELLER OBJECT
+        // -----------------------------------------
         SellerBO seller = new SellerBO();
         seller.setFullName(rq.getFullName());
         seller.setEmail(email);
-        seller.setPhoneNo(rq.getPhoneNo());
+        seller.setPhoneNo(phone);
         seller.setGst(rq.getGst());
         seller.setAdhaar(rq.getAdhaar());
         seller.setPanCard(rq.getPanCard());
         seller.setRole("SELLER");
 
-        // password
         if (Utils.isNotEmpty(rq.getPassword())) {
             seller.setPassword(passwordEncoder.encode(rq.getPassword()));
         }
 
-        // profile image
+        // -----------------------------------------
+        // IMAGE UPLOAD
+        // -----------------------------------------
         if (rq.getImage() != null && !rq.getImage().isEmpty()) {
             FileBO uploaded = fileService.uploadAndReturnFile(rq.getImage());
             seller.setImageFileId(uploaded.getId());
         }
 
-        // email verification token
-        String token = TokenUtils.generateVerificationToken();
+        // -----------------------------------------
+        // EMAIL VERIFICATION (Centralized in EmailService)
+        // -----------------------------------------
+        String token = TokenUtils.generateVerificationToken();  // new token
+
         seller.setVerificationToken(token);
         seller.setVerificationTokenExpiry(TokenUtils.generateExpiry());
         seller.setEmailVerified(false);
@@ -113,23 +149,31 @@ public class SellerServiceImpl implements SellerService {
 
         sellerRepo.save(seller);
 
-        // send email verification
+        // -----------------------------------------
+        // SEND VERIFICATION EMAIL
+        // -----------------------------------------
         emailService.sendVerificationEmail(
                 seller.getEmail(),
                 seller.getFullName(),
-                token
+                seller.getVerificationToken()
         );
 
+        // -----------------------------------------
+        // RESPONSE
+        // -----------------------------------------
         return ResponseUtils.success(
                 new SellerDataRs(MessageCodes.MC_SAVED_SUCCESSFUL, SellerMapper.mapToSellerRs(seller))
         );
     }
 
+
+
     // ===========================================================
-    // RETRIEVE SINGLE SELLER (similar to retrieveUser)
+    // RETRIEVE LOGGED-IN SELLER
     // ===========================================================
     @Override
     public BaseRs retrieveSeller() {
+
         try {
             Long sellerId = AuthUtils.findLoggedInUser().getDocId();
 
@@ -137,14 +181,6 @@ public class SellerServiceImpl implements SellerService {
                     .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_SELLER_NOT_FOUND));
 
             SellerRs sellerRs = SellerMapper.mapToSellerRs(seller);
-
-            if (seller.getImageFileId() != null) {
-                try {
-                    sellerRs.setImage(fileService.getContentFromGridFS(String.valueOf(seller.getImageFileId())));
-                } catch (Exception e) {
-                    log.warn("Image retrieval failed for seller {}", sellerId);
-                }
-            }
 
             return ResponseUtils.success(
                     new SellerDataRs(MessageCodes.MC_RETRIEVED_SUCCESSFUL, sellerRs)
@@ -156,8 +192,9 @@ public class SellerServiceImpl implements SellerService {
         }
     }
 
+
     // ===========================================================
-    // RETRIEVE ALL SELLERS (Admin only)
+    // GET ALL SELLERS (ADMIN)
     // ===========================================================
     @Override
     public BaseRs retrieveSellers() {
@@ -168,7 +205,14 @@ public class SellerServiceImpl implements SellerService {
             }
 
             List<SellerBO> sellers = sellerRepo.findAll();
-            List<SellerRs> sellerRsList = SellerMapper.mapToSellerRsList(sellers);
+
+            List<SellerRs> sellerRsList = sellers.stream()
+                    .map(seller -> {
+                        SellerRs rs = SellerMapper.mapToSellerRs(seller);
+                        rs.setDocId(null); // hide DB ID from admin
+                        return rs;
+                    })
+                    .toList();
 
             return ResponseUtils.success(
                     new SellerDataRsList(MessageCodes.MC_RETRIEVED_SUCCESSFUL, sellerRsList)
@@ -180,13 +224,24 @@ public class SellerServiceImpl implements SellerService {
         }
     }
 
+
+
     // ===========================================================
-    // RETRIEVE SELLER CARTS
+    // GET SELLER CARTS
     // ===========================================================
     @Override
     public BaseRs retrieveSellerCarts() {
 
-        Long sellerId = AuthUtils.findLoggedInUser().getDocId();
+        validateSellerAccess();
+
+        Long userPkId = AuthUtils.findLoggedInUser().getDocId();
+
+        // Get the seller record to extract PUBLIC sellerId (String)
+        SellerBO seller = sellerRepo.findById(userPkId)
+                .orElseThrow(() -> new RuntimeException("Seller not found"));
+
+        String sellerId = seller.getSellerId();   // <-- String sellerId
+
         List<CartBO> carts = cartRepo.findAllBySellerId(sellerId);
 
         if (Utils.isEmpty(carts)) {
@@ -199,75 +254,88 @@ public class SellerServiceImpl implements SellerService {
                         CartMapper.mapToCartRsList(carts, fileService)
                 )
         );
-
     }
 
+
+
     // ===========================================================
-    // DELETE SELLER (Admin only)
+    // DELETE SELLER (ADMIN ONLY)
     // ===========================================================
     @Override
     @Transactional
     public BaseRs deleteSeller(String id) {
 
-        try {
-            if (adminRepo.findById(AuthUtils.findLoggedInUser().getDocId()).isEmpty()) {
-                return ResponseUtils.failure(ErrorCodes.EC_ACCESS_DENIED);
-            }
+        Long adminId = AuthUtils.getLoggedUserId();
 
-            SellerBO seller = sellerRepo.findById(Long.valueOf(id))
-                    .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_SELLER_NOT_FOUND));
-
-            if (seller.getImageFileId() != null) {
-                try {
-                    fileService.deleteFileById(String.valueOf(seller.getImageFileId()));
-                } catch (Exception ignored) {}
-            }
-
-            sellerRepo.delete(seller);
-
-            return ResponseUtils.success(
-                    new SellerDataRs(MessageCodes.MC_DELETED_SUCCESSFUL, SellerMapper.mapToSellerRs(seller))
-            );
-
-        } catch (Exception e) {
-            log.error("deleteSeller() error:", e);
-            return ResponseUtils.failure(ErrorCodes.EC_INTERNAL_ERROR);
+        if (adminRepo.findById(adminId).isEmpty()) {
+            return ResponseUtils.failure(ErrorCodes.EC_ACCESS_DENIED);
         }
+
+        //  FIXED: use sellerId string, not numeric ID
+        SellerBO seller = sellerRepo.findBySellerId(id)
+                .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_SELLER_NOT_FOUND));
+
+        if (!seller.isActive()) {
+            return ResponseUtils.failure(
+                    "SELLER_ALREADY_INACTIVE",
+                    "Seller is already deactivated."
+            );
+        }
+
+        seller.setActive(false);
+        seller.setLocked(true);
+        seller.setVerified(false);
+
+        if (seller.getImageFileId() != null) {
+            try {
+                fileService.deleteFileById(String.valueOf(seller.getImageFileId()));
+            } catch (Exception ignored) {}
+            seller.setImageFileId(null);
+        }
+
+        sellerRepo.save(seller);
+
+        return ResponseUtils.success(
+                new SellerDataRs(
+                        MessageCodes.MC_DELETED_SUCCESSFUL,
+                        SellerMapper.mapToSellerRs(seller)
+                )
+        );
     }
 
-    @Override
-    public void sendVerificationEmail(SellerBO seller) {
 
-        if (seller == null || seller.getEmail() == null) {
-            log.error("sendVerificationEmail() failed → Seller or Email missing");
-            return;
-        }
 
-        try {
-            // Generate token + expiry
-            String token = TokenUtils.generateVerificationToken();
-            seller.setVerificationToken(token);
-            seller.setVerificationTokenExpiry(TokenUtils.generateExpiry());
-
-            sellerRepo.save(seller);
-
-            // Send email
-            emailService.sendVerificationEmail(
-                    seller.getEmail(),
-                    seller.getFullName(),
-                    token
-            );
-
-            log.info("Verification email sent to seller: {}", seller.getEmail());
-
-        } catch (Exception e) {
-            log.error("Failed to send verification email to seller {}", seller.getEmail(), e);
-        }
-    }
+//    // ===========================================================
+//    // SEND VERIFICATION EMAIL
+//    // ===========================================================
+//    @Override
+//    public void sendVerificationEmail(SellerBO seller) {
+//
+//        if (seller == null || seller.getEmail() == null) {
+//            log.error("sendVerificationEmail() failed → Seller or Email missing");
+//            return;
+//        }
+//
+//        try {
+//            String token = TokenUtils.generateVerificationToken();
+//            seller.setVerificationToken(token);
+//            seller.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+//            sellerRepo.save(seller);
+//
+//            emailService.sendVerificationEmail(
+//                    seller.getEmail(),
+//                    seller.getFullName(),
+//                    token
+//            );
+//
+//        } catch (Exception e) {
+//            log.error("Failed to send verification email", e);
+//        }
+//    }
 
 
     // ===========================================================
-    // UPDATE SELLER PROFILE (same UX as user update)
+    // UPDATE SELLER PROFILE
     // ===========================================================
     @Override
     @Transactional
@@ -283,54 +351,82 @@ public class SellerServiceImpl implements SellerService {
 
         boolean updated = false;
 
+        // ---------------------------------------------------------
+        // FULL NAME
+        // ---------------------------------------------------------
         if (Utils.isNotEmpty(rq.getFullName())) {
             seller.setFullName(rq.getFullName());
             updated = true;
         }
 
+        // ---------------------------------------------------------
+        // PHONE NUMBER (normalize + uniqueness)
+        // ---------------------------------------------------------
         if (Utils.isNotEmpty(rq.getPhoneNo())) {
-            seller.setPhoneNo(rq.getPhoneNo());
-            updated = true;
+
+            String normalized = PhoneUtils.normalize(rq.getPhoneNo());
+
+            if (!normalized.equals(seller.getPhoneNo())) {
+
+                boolean exists =
+                        sellerRepo.existsByPhoneNo(normalized) ||
+                                adminRepo.existsByPhoneNo(normalized) ||
+                                userRepo.existsByPhoneNo(normalized);
+
+                if (exists) {
+                    return ResponseUtils.failure("PHONE_ALREADY_EXISTS", "Phone number already registered.");
+                }
+
+                seller.setPhoneNo(normalized);
+                updated = true;
+            }
         }
 
+        // ---------------------------------------------------------
+        // PASSWORD UPDATE
+        // ---------------------------------------------------------
         if (Utils.isNotEmpty(rq.getPassword())) {
             seller.setPassword(passwordEncoder.encode(rq.getPassword()));
             updated = true;
         }
 
+        // ---------------------------------------------------------
+        // IMAGE UPDATE
+        // ---------------------------------------------------------
         if (rq.getImage() != null && !rq.getImage().isEmpty()) {
             FileBO uploaded = fileService.uploadAndReturnFile(rq.getImage());
             seller.setImageFileId(uploaded.getId());
             updated = true;
         }
 
-        // EMAIL CHANGE → Needs verification
-        if (Utils.isNotEmpty(rq.getEmail())
-                && !rq.getEmail().equalsIgnoreCase(seller.getEmail())) {
+        // ---------------------------------------------------------
+        // EMAIL CHANGE (SHIFTED TO EmailService)
+        // ---------------------------------------------------------
+        if (Utils.isNotEmpty(rq.getEmail()) &&
+                !rq.getEmail().equalsIgnoreCase(seller.getEmail())) {
 
             String newEmail = rq.getEmail().trim().toLowerCase();
 
-            if (sellerRepo.findByEmailIgnoreCase(newEmail).isPresent()) {
-                return ResponseUtils.failure("EMAIL_EXISTS", "Email already exists.");
+            boolean emailExists =
+                    sellerRepo.findByEmailIgnoreCase(newEmail).isPresent() ||
+                            userRepo.findByEmailIgnoreCase(newEmail).isPresent() ||
+                            adminRepo.findByEmailIgnoreCase(newEmail).isPresent();
+
+            if (emailExists) {
+                return ResponseUtils.failure("EMAIL_EXISTS", "Email already registered.");
             }
 
-            seller.setPendingEmail(newEmail);
-            seller.setVerificationToken(TokenUtils.generateVerificationToken());
-            seller.setVerificationTokenExpiry(TokenUtils.generateExpiry());
-            seller.setEmailVerified(false);
-            seller.setLocked(true);
+            //  CALL EMAIL SERVICE (moved the logic here)
+            emailService.initiateSellerEmailChange(seller, newEmail);
 
             sellerRepo.save(seller);
 
-            emailService.sendVerificationEmail(
-                    newEmail,
-                    seller.getFullName(),
-                    seller.getVerificationToken()
-            );
-
-            return ResponseUtils.success("Verification email sent. Please verify to update email.");
+            return ResponseUtils.success("Verification email sent. Please verify new email.");
         }
 
+        // ---------------------------------------------------------
+        // SAVE CHANGES (IF ANY)
+        // ---------------------------------------------------------
         if (updated) {
             sellerRepo.save(seller);
             return ResponseUtils.success("Profile updated successfully.");
@@ -339,62 +435,102 @@ public class SellerServiceImpl implements SellerService {
         return ResponseUtils.failure("NO_CHANGES", "No valid fields provided.");
     }
 
+
+//    // ===========================================================
+//    // VERIFY EMAIL
+//    // ===========================================================
+//    @Override
+//    @Transactional
+//    public BaseRs verifyEmail(String token) {
+//
+//        SellerBO seller = sellerRepo.findByVerificationToken(token)
+//                .orElse(null);
+//
+//        if (seller == null) {
+//            return ResponseUtils.failure("INVALID_TOKEN");
+//        }
+//
+//        if (seller.getVerificationTokenExpiry() == null ||
+//                seller.getVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
+//            return ResponseUtils.failure("TOKEN_EXPIRED");
+//        }
+//
+//        // If seller was updating email
+//        if (Utils.isNotEmpty(seller.getPendingEmail())) {
+//            seller.setEmail(seller.getPendingEmail());
+//            seller.setPendingEmail(null);
+//        }
+//
+//        seller.setEmailVerified(true);
+//
+//        // IMPORTANT CHANGE (Allow login after email verification)
+//        seller.setLocked(false);      // ✔ Seller can login
+//        seller.setVerified(false);    // ✔ Still cannot add/edit/delete until admin approves
+//
+//        seller.setVerificationToken(null);
+//        seller.setVerificationTokenExpiry(null);
+//
+//        sellerRepo.save(seller);
+//
+//        return ResponseUtils.success("Email verified successfully. You can login now, but admin approval is required to perform actions.");
+//    }
+//
+//
+//
+//    // ===========================================================
+//    // SEND ADMIN APPROVAL EMAIL
+//    // ===========================================================
+//    @Override
+//    public void sendAdminApprovalEmail(SellerBO seller) {
+//
+//        if (seller == null || seller.getEmail() == null) {
+//            return;
+//        }
+//
+//        try {
+//            emailService.sendSellerApprovalEmail(
+//                    seller.getEmail(),
+//                    seller.getFullName()
+//            );
+//
+//        } catch (Exception e) {
+//            log.error("Failed to send admin approval email", e);
+//        }
+//    }
+
+
     // ===========================================================
-    // VERIFY EMAIL (for signup + email update)
+    // VALIDATE SELLER ACCESS (USED BY PRODUCT / CART)
     // ===========================================================
-    @Override
-    @Transactional
-    public BaseRs verifyEmail(String token) {
+    private SellerBO validateSellerAccess() {
 
-        SellerBO seller = sellerRepo.findByVerificationToken(token)
-                .orElse(null);
+        Long id = AuthUtils.getLoggedUserId();
+        String role = AuthUtils.getLoggedUserRole();
 
-        if (seller == null) {
-            return ResponseUtils.failure("INVALID_TOKEN");
+        if (!"SELLER".equalsIgnoreCase(role)) {
+            throw new RuntimeException("Only sellers can access this resource.");
         }
 
-        if (seller.getVerificationTokenExpiry() == null ||
-                seller.getVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
-            return ResponseUtils.failure("TOKEN_EXPIRED");
+        SellerBO seller = sellerRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Seller not found"));
+
+        if (!seller.isEmailVerified()) {
+            throw new RuntimeException("Please verify your email before performing this action.");
         }
 
-        // If email update
-        if (Utils.isNotEmpty(seller.getPendingEmail())
-                && !seller.getPendingEmail().equalsIgnoreCase(seller.getEmail())) {
-            seller.setEmail(seller.getPendingEmail());
-            seller.setPendingEmail(null);
-        }
-
-        seller.setEmailVerified(true);
-        seller.setLocked(true);  // Admin approval still required
-        seller.setVerified(false);
-        seller.setVerificationToken(null);
-        seller.setVerificationTokenExpiry(null);
-
-        sellerRepo.save(seller);
-
-        return ResponseUtils.success("Email verified successfully.");
-    }
-
-    @Override
-    public void sendAdminApprovalEmail(SellerBO seller) {
-
-        if (seller == null || seller.getEmail() == null) {
-            log.error("sendAdminApprovalEmail() failed → Seller or Email missing");
-            return;
-        }
-
-        try {
-            emailService.sendSellerApprovalEmail(
-                    seller.getEmail(),
-                    seller.getFullName()
+        if (!seller.isVerified()) {
+            throw new RuntimeException(
+                    "Seller " + seller.getSellerId() + " → Your account is still pending admin approval."
             );
-
-            log.info("Admin approval email sent to seller {}", seller.getEmail());
-
-        } catch (Exception e) {
-            log.error("Failed to send admin approval email to seller {}", seller.getEmail(), e);
         }
+
+
+        if (seller.isLocked()) {
+            throw new RuntimeException("Your seller account is locked by admin.");
+        }
+
+        return seller;   // RETURN SAME AS BEFORE
     }
 
 }
+

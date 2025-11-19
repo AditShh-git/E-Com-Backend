@@ -1,5 +1,7 @@
 package com.one.aim.controller;
 
+import com.one.aim.rs.SellerRs;
+import com.one.aim.rs.data.SellerDataRsList;
 import com.one.aim.service.AdminService;
 import com.one.aim.service.AdminSettingService;
 import lombok.extern.slf4j.Slf4j;
@@ -7,6 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/settings")
@@ -76,7 +80,12 @@ public class AdminSettingController {
 // ==============================
     @GetMapping("/seller/unverified")
     public ResponseEntity<?> getUnverifiedSellers() {
-        return ResponseEntity.ok(adminSettingService.getUnverifiedSellers());
+
+        List<SellerRs> list = adminSettingService.getUnverifiedSellers();
+
+        return ResponseEntity.ok(
+                new SellerDataRsList("UNVERIFIED_SELLERS", list)
+        );
     }
 
     // ==============================
@@ -84,7 +93,12 @@ public class AdminSettingController {
 // ==============================
     @GetMapping("/seller/verified")
     public ResponseEntity<?> getVerifiedSellers() {
-        return ResponseEntity.ok(adminSettingService.getVerifiedSellers());
+
+        List<SellerRs> list = adminSettingService.getVerifiedSellers();
+
+        return ResponseEntity.ok(
+                new SellerDataRsList("VERIFIED_SELLERS", list)
+        );
     }
 
 }

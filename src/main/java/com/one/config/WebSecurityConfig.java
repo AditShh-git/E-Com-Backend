@@ -126,7 +126,8 @@ public class WebSecurityConfig {
                         // PUBLIC AUTH (ALL ROLES)
                         // ======================================
                         .requestMatchers(
-                                "/auth/**"
+                                "/auth/**",
+                                "/api/files/public/**"
                         ).permitAll()
 
                         // ======================================

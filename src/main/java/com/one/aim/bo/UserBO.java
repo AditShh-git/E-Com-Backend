@@ -42,7 +42,7 @@ public class UserBO {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    @Column(length = 15)
+    @Column(length = 15,unique = true)
     private String phoneNo;
 
     @Column(nullable = false)
@@ -113,9 +113,8 @@ public class UserBO {
     // ===========================================================
     // PROFILE IMAGE
     // ===========================================================
-    @Lob
-    @Column(name = "image", columnDefinition = "MEDIUMBLOB")
-    private byte[] image;
+    @Column(name = "image")
+    private Long imageFileId;
 
 
     // REMOVED: Old User → Cart mapping `mappedBy = "userCart"`

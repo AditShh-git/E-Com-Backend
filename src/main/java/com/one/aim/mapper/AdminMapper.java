@@ -10,41 +10,22 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class AdminMapper {
 
-	public static AdminRs mapToAdminRs(AdminBO bo) {
+    public static AdminRs mapToAdminRs(AdminBO bo) {
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing mapToAdminRs(AdminBO) ->");
-		}
+        AdminRs rs = new AdminRs();
 
-		try {
-			AdminRs rs = null;
+        rs.setDocId(String.valueOf(bo.getId()));
+        rs.setUserName(bo.getFullName());
+        rs.setPhoneNo(bo.getPhoneNo());
+        rs.setEmail(bo.getEmail());
+        rs.setRoll(bo.getRole());
 
-			if (null == bo) {
-				log.warn("AdminBO is NULL");
-				return rs;
-			}
-			rs = new AdminRs();
-			rs.setDocId(String.valueOf(bo.getId()));
-			if (Utils.isNotEmpty(bo.getFullName())) {
-				rs.setUserName(bo.getFullName());
-			}
-			if (Utils.isNotEmpty(bo.getPhoneNo())) {
-				rs.setPhoneNo(bo.getPhoneNo());
-			}
-			if (Utils.isNotEmpty(bo.getEmail())) {
-				rs.setEmail(bo.getEmail());
-			}
-			rs.setRoll(bo.getRole());
-			if (bo.getImage() != null) {
-				rs.setImage(bo.getImage());
-			}
-			// rs.setAtts(AttachmentMapper.mapToAttachmentRsList(bo.getAtts()));
-			//rs.setImageId(bo.getImageid());
-			return rs;
-		} catch (Exception e) {
-			log.error("Exception in mapToAdminRs(AdminBO) - " + e);
-			return null;
-		}
-	}
+        // NEW — map fileId → URL
+        if (bo.getImageId() != null) {
+            rs.setImageUrl("/api/files/private/" + bo.getImageId() + "/view");
+        }
+
+        return rs;
+    }
 
 }

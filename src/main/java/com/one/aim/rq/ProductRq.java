@@ -37,6 +37,6 @@ public class ProductRq extends BaseVM {
 
     private String categoryName;
 
-    // ✅ Multiple images for upload
+    //  Multiple images for upload
     private List<MultipartFile> images = new ArrayList<>();
 }

@@ -8,24 +8,26 @@ import java.util.List;
 
 public interface InvoiceService {
 
-    // USER invoice (already exists)
-    String downloadInvoiceHtml(long orderId) throws Exception;
+    // USER: Full invoice (HTML preview)
+    String downloadInvoiceHtml(String orderId) throws Exception;
 
-    // NEW: SELLER invoice HTML
-    String downloadSellerInvoiceHtml(long orderId, long sellerId) throws Exception;
+    // SELLER: Simplified invoice (HTML preview)
+    String downloadSellerInvoiceHtml(String orderId, String sellerId) throws Exception;
 
-    // Stored PDF (user/admin)
-    byte[] downloadInvoicePdf(Long orderId) throws Exception;
+    // USER / ADMIN: Download stored master PDF
+    byte[] downloadInvoicePdf(String orderId) throws Exception;
 
-    // NEW: On-the-fly seller PDF
-    byte[] downloadSellerInvoicePdf(Long orderId, Long sellerId) throws Exception;
+    // SELLER: Generate PDF dynamically from HTML
+    byte[] downloadSellerInvoicePdf(String orderId, String sellerId) throws Exception;
 
-    // Generate & store master invoice (user)
-    InvoiceBO generateInvoice(Long orderId) throws Exception;
+    // Create + store PDF invoice (User)
+    InvoiceBO generateInvoice(String orderId) throws Exception;
 
-    // Role-based list APIs
+    // Fetch invoice using public orderId
+    InvoiceBO getInvoiceByOrderId(String orderId);
+
+    // Lists
     List<InvoiceBO> getAllInvoicesForAdmin();
-    List<InvoiceBO> getInvoicesForSeller(Long sellerId);
     List<InvoiceBO> getInvoicesForUser(Long userId);
-
+    List<InvoiceBO> getInvoicesForSeller(String sellerId);
 }
