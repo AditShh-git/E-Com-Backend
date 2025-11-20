@@ -25,4 +25,5 @@ public interface AdminRepo extends JpaRepository<AdminBO, Long> {
     Optional<AdminBO> findByEmailIgnoreCase(String email);
 
     Optional<AdminBO> findByResetToken(String token);
+    
 }
