@@ -1,5 +1,6 @@
 package com.one.aim.controller;
 
+import com.one.aim.rq.CancelPaymentRq;
 import com.one.aim.rq.CreatePaymentRq;
 import com.one.aim.rq.VerifyPaymentRq;
 import lombok.RequiredArgsConstructor;
@@ -48,11 +49,10 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.verifyRazorpayPayment(rq));
     }
 
-    // ============================================================
-    // 3. OLD Internal Payment API (Optional)
-    // ============================================================
-    @PostMapping
-    public ResponseEntity<?> oldPayment(@RequestBody PaymentRq rq) throws Exception {
-        return ResponseEntity.ok(paymentService.processPayment(rq));
+    @PostMapping("/cancel")
+    public ResponseEntity<?> cancelPayment(@RequestBody CancelPaymentRq rq) throws Exception {
+        return ResponseEntity.ok(paymentService.cancelPayment(rq));
     }
+
+
 }

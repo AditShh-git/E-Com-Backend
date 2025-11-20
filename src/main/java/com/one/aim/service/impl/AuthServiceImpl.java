@@ -10,6 +10,7 @@ import com.one.aim.repo.SellerRepo;
 import com.one.aim.repo.UserRepo;
 import com.one.aim.rs.ResetPasswordRs;
 import com.one.aim.rs.data.LoginDataRs;
+import com.one.aim.service.AdminAnalyticsService;
 import com.one.aim.service.AuthService;
 import com.one.aim.service.EmailService;
 import com.one.security.jwt.JwtUtils;
@@ -43,20 +44,21 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final JavaMailSender javaMailSender;
-    private final EmailService emailService;   // All email logic centralized here
+    private final UserActivityService  userActivityService;
+    private final EmailService emailService;
 
-    // ============================================================
-    // SIGN IN (User + Seller + Admin)
-    // ============================================================
     @Override
     public BaseRs signIn(Authentication authentication) throws Exception {
 
         UserDetailsImpl user = (UserDetailsImpl) authentication.getPrincipal();
 
-        // CENTRALIZED EMAIL VERIFIED CHECK
+        // Log user login activity
+        userActivityService.log(user.getId(), "LOGIN", "User logged in");
+
+        // Check email verification (common for all roles)
         emailService.checkEmailVerified(user);
 
-        // SELLER LOGIN CHECKS
+        // ============= SELLER LOGIN CHECKS (ALLOW LOGIN) =============
         if ("SELLER".equals(user.getRole())) {
 
             SellerBO seller = sellerRepo.findById(user.getId()).orElse(null);
@@ -64,25 +66,27 @@ public class AuthServiceImpl implements AuthService {
                 return ResponseUtils.failure("SELLER_NOT_FOUND");
             }
 
+            // Only block if ADMIN hard-locked the account
             if (seller.isLocked()) {
                 return ResponseUtils.failure(
                         ErrorCodes.EC_ACCOUNT_LOCKED,
                         "Your seller account has been locked by admin."
                 );
             }
+
+            //  DO NOT block login if seller is NOT approved
+            // They just cannot perform product actions later
         }
 
-        // ADMIN LOGIN CHECKS
+        // ============= ADMIN LOGIN CHECKS =============
         if ("ADMIN".equals(user.getRole())) {
-
             AdminBO admin = adminRepo.findById(user.getId()).orElse(null);
-
             if (admin == null) {
                 return ResponseUtils.failure("ADMIN_NOT_FOUND");
             }
         }
 
-        // GENERATE TOKENS
+        // ============= GENERATE TOKENS =============
         String accessToken = jwtUtils.generateAccessToken(authentication);
         String refreshToken = jwtUtils.generateRefreshToken(authentication);
 
@@ -90,14 +94,12 @@ public class AuthServiceImpl implements AuthService {
         rs.setAccessToken(accessToken);
         rs.setRefreshToken(refreshToken);
 
-        // ----------------------------------------------------
-        // CUSTOM RESPONSE FOR SELLER LOGIN
-        // ----------------------------------------------------
+        // ============= SELLER CUSTOM RESPONSE =============
         if ("SELLER".equals(user.getRole())) {
+
             SellerBO seller = sellerRepo.findById(user.getId()).orElse(null);
 
-//            rs.setEmpId(seller.getId());
-            rs.setSellerId(seller.getSellerId());  // <-------- SELLER ID FIELD
+            rs.setSellerId(seller.getSellerId());
             rs.setUsername(seller.getEmail());
             rs.setFullname(seller.getFullName());
             rs.setEmail(seller.getEmail());
@@ -106,9 +108,7 @@ public class AuthServiceImpl implements AuthService {
             return ResponseUtils.success(rs);
         }
 
-        // ----------------------------------------------------
-        // NORMAL RESPONSE for USER and ADMIN
-        // ----------------------------------------------------
+        // ============= USER + ADMIN RESPONSE =============
         rs.setEmpId(user.getId());
         rs.setUsername(user.getEmail());
         rs.setFullname(user.getFullName());
@@ -117,6 +117,7 @@ public class AuthServiceImpl implements AuthService {
 
         return ResponseUtils.success(rs);
     }
+
 
 
 

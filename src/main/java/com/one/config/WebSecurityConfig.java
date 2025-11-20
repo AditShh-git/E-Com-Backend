@@ -176,7 +176,8 @@ public class WebSecurityConfig {
                                 "/api/seller/carts",
                                 "/api/seller/product/**",
                                 "/api/seller/download/**",
-                                "/api/seller/all/invoices"
+                                "/api/seller/all/invoices",
+                                "/api/seller/analytics/**"
                         ).hasAuthority("SELLER")
 
                         // ======================================

@@ -83,6 +83,7 @@ public class ErrorCodes {
     public static final String EC_ALLOWED_FILE_TYPES        = "EC_ALLOWED_FILE_TYPES";
     public static final String EC_DOCUMENT_ALREADY_EXISTS   = "EC_DOCUMENT_ALREADY_EXISTED";
     public static final String EC_CLONE_FAILED              = "EC_CLONE_FAILED";
+    public static final String EC_INVOICE_NOT_FOUND = "EC_INVOICE_NOT_FOUND";
 
     // ============================================================
     // VALIDATION & INPUT ERRORS

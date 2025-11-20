@@ -21,6 +21,7 @@ import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -41,6 +42,11 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepo productRepo;
     private final SellerRepo sellerRepo;
     private final FileService fileService;
+    private final UserActivityService userActivityService;
+
+    @Value("${app.frontend.product.url}")
+    private String productFrontUrl;
+
 
     // ===========================================================
     // ADD PRODUCT (SELLER)
@@ -50,7 +56,7 @@ public class ProductServiceImpl implements ProductService {
     public BaseRs addProduct(ProductRq rq) {
 
         try {
-            validateSellerAccess();   // KEEP AS IT IS
+            validateSellerAccess();
 
             List<String> errors = ProductHelper.validateProduct(rq);
             if (!errors.isEmpty()) {
@@ -84,11 +90,19 @@ public class ProductServiceImpl implements ProductService {
 
             productRepo.save(bo);
 
+            // -----------------------------------------------------
+            // USER ACTIVITY LOG — PRODUCT CREATED
+            // -----------------------------------------------------
+            userActivityService.log(
+                    sellerId,
+                    "PRODUCT_CREATED",
+                    "Created product: " + bo.getName()
+            );
+
             ProductRs rs = ProductMapper.mapToProductRs(bo, fileService);
             return ResponseUtils.success(new ProductDataRs("Product created successfully", rs));
         }
         catch (RuntimeException ex) {
-
             return ResponseUtils.failure("EC_ADMIN_APPROVAL_REQUIRED", ex.getMessage());
         }
         catch (Exception e) {
@@ -105,7 +119,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public BaseRs updateProduct(ProductRq rq) {
 
-        validateSellerAccess();  // REQUIRED
+        validateSellerAccess();
 
         try {
             if (rq.getDocId() == null) {
@@ -132,6 +146,15 @@ public class ProductServiceImpl implements ProductService {
 
             productRepo.save(bo);
 
+            // -----------------------------------------------------
+            // USER ACTIVITY LOG — PRODUCT UPDATED
+            // -----------------------------------------------------
+            userActivityService.log(
+                    sellerId,
+                    "PRODUCT_UPDATED",
+                    "Updated product: " + bo.getName()
+            );
+
             ProductRs rs = ProductMapper.mapToProductRs(bo, fileService);
             return ResponseUtils.success(new ProductDataRs("Product updated successfully", rs));
         }
@@ -149,7 +172,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public BaseRs uploadProductImages(Long productId, List<MultipartFile> files) {
 
-        validateSellerAccess();  // REQUIRED
+        validateSellerAccess();
 
         try {
             ProductBO bo = productRepo.findById(productId).orElse(null);
@@ -174,6 +197,16 @@ public class ProductServiceImpl implements ProductService {
             }
 
             productRepo.save(bo);
+
+            // -----------------------------------------------------
+            // USER ACTIVITY LOG — IMAGES UPLOADED
+            // -----------------------------------------------------
+            userActivityService.log(
+                    sellerId,
+                    "PRODUCT_IMAGE_UPLOADED",
+                    "Uploaded images for product: " + bo.getName()
+            );
+
             return ResponseUtils.success(new BaseDataRs("Images uploaded successfully", imageIds));
         }
         catch (Exception e) {
@@ -224,7 +257,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public BaseRs deleteProductImage(Long productId, Long imageId) {
 
-        validateSellerAccess();  // REQUIRED
+        validateSellerAccess();
 
         try {
             ProductBO bo = productRepo.findById(productId).orElse(null);
@@ -242,6 +275,15 @@ public class ProductServiceImpl implements ProductService {
             productRepo.save(bo);
 
             fileService.deleteFileById(String.valueOf(imageId));
+
+            // -----------------------------------------------------
+            // USER ACTIVITY LOG — IMAGE DELETED
+            // -----------------------------------------------------
+            userActivityService.log(
+                    sellerId,
+                    "PRODUCT_IMAGE_DELETED",
+                    "Deleted image from product: " + bo.getName()
+            );
 
             return ResponseUtils.success("Image deleted successfully");
         }
@@ -281,7 +323,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public BaseRs deleteProduct(Long productId) {
 
-        validateSellerAccess();  // REQUIRED
+        validateSellerAccess();
 
         try {
             ProductBO bo = productRepo.findById(productId).orElse(null);
@@ -296,6 +338,15 @@ public class ProductServiceImpl implements ProductService {
             }
 
             productRepo.delete(bo);
+
+            // -----------------------------------------------------
+            // USER ACTIVITY LOG — PRODUCT DELETED
+            // -----------------------------------------------------
+            userActivityService.log(
+                    sellerId,
+                    "PRODUCT_DELETED",
+                    "Deleted product: " + bo.getName()
+            );
 
             return ResponseUtils.success("Product deleted successfully");
         }
@@ -396,7 +447,7 @@ public class ProductServiceImpl implements ProductService {
 
     private String buildShareMessage(ProductBO product) {
         return "Check out this product: " + product.getName()
-                + "\nhttp://localhost:8989/aimdev/api/public/product/" + product.getSlug();
+                + "\n" + productFrontUrl + product.getSlug();
     }
 
     private SellerBO validateSellerAccess() {

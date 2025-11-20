@@ -3,7 +3,6 @@ package com.one.aim.bo;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import jakarta.persistence.*;
@@ -57,6 +56,10 @@ public class OrderBO {
             inverseJoinColumns = @JoinColumn(name = "cart_id")
     )
     private List<CartBO> cartItems = new ArrayList<>();
+
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<OrderItemBO> orderItems = new ArrayList<>();
+
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "delivery_person_id")

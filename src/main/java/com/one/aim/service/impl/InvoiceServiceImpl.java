@@ -139,30 +139,35 @@ public class InvoiceServiceImpl implements InvoiceService {
 
             String gst = safe(s.getGst());
             String email = safe(s.getEmail());
+            String phone = safe(s.getPhoneNo());
 
-            // =========================
-            // USER: show gst + email
-            // =========================
-            if ("USER".equalsIgnoreCase(role)) {
-                // already fine
-            }
-
-            // =========================
-            // SELLER: show gst + email
-            // =========================
-            if ("SELLER".equalsIgnoreCase(role)) {
-                // already fine
-            }
-
-            // =========================
-            // ADMIN: NO PHONE displayed
-            // =========================
-
-            sb.append("""
+            // ===============================
+            // ADMIN → show phone number
+            // ===============================
+            if ("ADMIN".equalsIgnoreCase(role)) {
+                sb.append("""
             <br>
             %s<br>
             GST: %s<br>
             Email: %s<br>
+            Phone: %s<br>
+            """.formatted(
+                        safe(s.getFullName()),
+                        gst,
+                        email,
+                        phone
+                ));
+                continue;
+            }
+
+            // ===============================
+            // USER / SELLER → no phone number
+            // ===============================
+            sb.append("""
+        <br>
+        %s<br>
+        GST: %s<br>
+        Email: %s<br>
         """.formatted(
                     safe(s.getFullName()),
                     gst,

@@ -37,7 +37,7 @@ public class OrderServiceImpl implements OrderService {
     private final InvoiceService invoiceService;
     private final InvoiceRepo invoiceRepo;
     private final FileService fileService;
-    private final SellerRepo sellerRepo;
+    private final UserActivityService  userActivityService;
     private final ProductRepo productRepo;
 
     public BaseRs getOrders() {
@@ -58,7 +58,7 @@ public class OrderServiceImpl implements OrderService {
         }
 
         // ------------------------------------------------------------
-        // LOAD CART ITEMS (only enabled = true)   FIXED
+        // LOAD CART ITEMS (only enabled = true)
         // ------------------------------------------------------------
         List<CartBO> cartItems = cartRepo.findAllByUserAddToCart_IdAndEnabled(userId, true);
 
@@ -90,17 +90,15 @@ public class OrderServiceImpl implements OrderService {
             product.updateLowStock();
             productRepo.save(product);
 
-            // line total
-            // always use latest product price (not old cart snapshot)
+            // always use latest product price
             long productPrice = product.getPrice() == null ? 0L : product.getPrice().longValue();
 
-            // update snapshot so invoice + UI show correct price
+            // update snapshot into cart
             cart.setPrice(productPrice);
             cartRepo.save(cart);
 
-            // calculate correct total
+            // accumulate total
             totalAmount += productPrice * qty;
-
         }
 
         // ------------------------------------------------------------
@@ -128,7 +126,7 @@ public class OrderServiceImpl implements OrderService {
         order.setOrderTime(LocalDateTime.now());
         order.setTotalAmount(totalAmount);
         order.setShippingAddress(address);
-        order.setCartItems(cartItems);
+        order.setCartItems(cartItems);     // OLD M2M mapping kept for backward compatibility
 
         // Normalize payment method
         String pm = rq.getPaymentMethod() == null ? "" : rq.getPaymentMethod().trim().toUpperCase();
@@ -150,8 +148,37 @@ public class OrderServiceImpl implements OrderService {
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
         order.setInvoiceno(invoiceNo);
 
-        // Save order to DB
+        // First save (before OrderItems)
         orderRepo.save(order);
+
+        // ============================================================
+        // NEW: CREATE OrderItemBO entries (Safe migration)
+        // ============================================================
+        List<OrderItemBO> orderItemList = new ArrayList<>();
+
+        for (CartBO cart : cartItems) {
+
+            ProductBO product = cart.getProduct();
+
+            OrderItemBO item = OrderItemBO.builder()
+                    .order(order)
+                    .product(product)
+                    .sellerId(product.getSeller().getId())
+                    .productName(product.getName())
+                    .productCategory(product.getCategoryName())
+                    .unitPrice(cart.getPrice())
+                    .quantity(cart.getQuantity())
+                    .totalPrice(cart.getPrice() * cart.getQuantity())
+                    .build();
+
+            orderItemList.add(item);
+        }
+
+        order.setOrderItems(orderItemList);
+
+        // Second save: persists OrderItemBO
+        orderRepo.save(order);
+
 
         // ------------------------------------------------------------
         // DISABLE CART ITEMS
@@ -162,7 +189,7 @@ public class OrderServiceImpl implements OrderService {
         cartRepo.saveAll(cartItems);
 
         // ------------------------------------------------------------
-        // GENERATE AND STORE INVOICE PDF
+        // GENERATE AND STORE INVOICE PDF (still uses old cart logic)
         // ------------------------------------------------------------
         String html = invoiceService.downloadInvoiceHtml(order.getOrderId());
 
@@ -185,16 +212,21 @@ public class OrderServiceImpl implements OrderService {
         // RESPONSE
         // ------------------------------------------------------------
         Map<String, Object> data = new HashMap<>();
-//        data.put("orderId", order.getId());
         data.put("orderId", order.getOrderId());
         data.put("invoiceNo", invoiceNo);
         data.put("totalAmount", totalAmount);
         data.put("paymentMethod", pm);
         data.put("paymentStatus", order.getPaymentStatus());
 
+        userActivityService.log(
+                userId,
+                "ORDER_PLACED",
+                "Order placed with ID: " + order.getOrderId()
+        );
+
+
         return ResponseUtils.success(data);
     }
-
 
 
 
@@ -223,10 +255,18 @@ public class OrderServiceImpl implements OrderService {
 
         List<OrderBO> orders = orderRepo.findAllByUserIdOrderByOrderTimeDesc(userId);
 
+        // Activity Log
+        userActivityService.log(
+                userId,
+                "VIEW_ORDERS",
+                "Viewed order history"
+        );
+
         return ResponseUtils.success(
                 OrderMapper.mapToOrderRsList(orders, fileService)
         );
     }
+
 
 
     @Override
@@ -243,7 +283,7 @@ public class OrderServiceImpl implements OrderService {
             throw new RuntimeException("User not authenticated");
         }
 
-        // Load order by business orderId: ORD-XXXXXX
+        // Load order
         OrderBO order = orderRepo.findByOrderId(orderId)
                 .orElseThrow(() -> new RuntimeException("Order not found"));
 
@@ -252,24 +292,21 @@ public class OrderServiceImpl implements OrderService {
             return ResponseUtils.failure("NOT_ALLOWED", "You cannot cancel this order");
         }
 
-        // Optional: block cancel if already processed
+        // Block cancellation after processing
         String status = order.getOrderStatus() == null ? "" : order.getOrderStatus().toUpperCase();
         if (!status.equals("INITIAL")) {
-            // you can relax this if you want
             return ResponseUtils.failure("CANNOT_CANCEL", "Order already processed");
         }
 
-        // ----------------------------------------------------
-        // 1. Restore stock + re-enable cart items
-        // ----------------------------------------------------
+        // ------------------------------------------------------------
+        // 1. RESTORE STOCK + ENABLE CART ITEMS
+        // ------------------------------------------------------------
         List<CartBO> carts = order.getCartItems();
         if (carts != null && !carts.isEmpty()) {
             for (CartBO cart : carts) {
 
-                // put item back into user's active cart
                 cart.setEnabled(true);
 
-                // restore stock
                 ProductBO product = cart.getProduct();
                 if (product != null) {
                     int current = product.getStock() == null ? 0 : product.getStock();
@@ -282,16 +319,25 @@ public class OrderServiceImpl implements OrderService {
             cartRepo.saveAll(carts);
         }
 
-        // ----------------------------------------------------
-        // 2. Mark order as CANCELLED
-        // ----------------------------------------------------
+        // ------------------------------------------------------------
+        // 2. MARK ORDER AS CANCELLED
+        // ------------------------------------------------------------
         order.setOrderStatus("CANCELLED");
         order.setPaymentStatus("CANCELLED");
         orderRepo.save(order);
 
-        // ----------------------------------------------------
-        // 3. Response
-        // ----------------------------------------------------
+        // ------------------------------------------------------------
+        // USER ACTIVITY LOG — ORDER CANCELLED
+        // ------------------------------------------------------------
+        userActivityService.log(
+                userId,
+                "ORDER_CANCELLED",
+                "Cancelled order ID: " + order.getOrderId()
+        );
+
+        // ------------------------------------------------------------
+        // 3. RESPONSE
+        // ------------------------------------------------------------
         Map<String, Object> data = new HashMap<>();
         data.put("orderId", order.getOrderId());
         data.put("orderStatus", order.getOrderStatus());
@@ -299,6 +345,7 @@ public class OrderServiceImpl implements OrderService {
 
         return ResponseUtils.success(data);
     }
+
 
 
 

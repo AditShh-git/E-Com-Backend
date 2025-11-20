@@ -47,6 +47,7 @@ public class CartServiceImpl implements CartService {
     private final UserRepo userRepo;
     private final ProductRepo productRepo;
     private final InvoiceService  invoiceService;
+    private final UserActivityService userActivityService;
     private final FileService fileService;
 
     // ==========================================================
@@ -91,6 +92,13 @@ public class CartServiceImpl implements CartService {
 
         cartRepo.save(cart);
 
+        userActivityService.log(
+                userId,
+                "ADD_TO_CART",
+                "Added product ID: " + productId
+        );
+
+
         return ResponseUtils.success(
                 new CartDataRs("Added to cart",
                         CartMapper.mapToCartRs(cart, fileService))
@@ -119,11 +127,19 @@ public class CartServiceImpl implements CartService {
         cart.setQuantity(quantity);
         cartRepo.save(cart);
 
+        // USER ACTIVITY LOG
+        userActivityService.log(
+                userId,
+                "UPDATE_CART",
+                "Updated quantity for cart ID: " + cartId + " to " + quantity
+        );
+
         return ResponseUtils.success(
                 new CartDataRs("Quantity updated",
                         CartMapper.mapToCartRs(cart, fileService))
         );
     }
+
 
     // ==========================================================
     // REMOVE CART ITEM
@@ -143,8 +159,16 @@ public class CartServiceImpl implements CartService {
 
         cartRepo.delete(cart);
 
+        // USER ACTIVITY LOG
+        userActivityService.log(
+                userId,
+                "REMOVE_FROM_CART",
+                "Removed cart ID: " + cartId
+        );
+
         return ResponseUtils.success("Removed from cart");
     }
+
 
     // ==========================================================
     // LIST USER CART

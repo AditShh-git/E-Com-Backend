@@ -1,5 +1,6 @@
 package com.one.aim.service;
 
+import com.one.aim.rq.CancelPaymentRq;
 import com.one.aim.rq.CreatePaymentRq;
 import com.one.aim.rq.PaymentRq;
 import com.one.aim.rq.VerifyPaymentRq;
@@ -19,9 +20,6 @@ public interface PaymentService {
      */
     BaseRs verifyRazorpayPayment(VerifyPaymentRq rq) throws Exception;
 
-    /**
-     * 3) For your old internal logging (optional)
-     * Keep only if you are using it somewhere else
-     */
-    BaseRs processPayment(PaymentRq rq) throws Exception;
+    BaseRs cancelPayment(CancelPaymentRq rq) throws Exception;
+
 }
