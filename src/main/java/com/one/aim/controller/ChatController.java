@@ -97,6 +97,6 @@ public class ChatController {
 
         messageService.markAsRead(room, receiver);
 
-        return new StandardRs("Messages marked as read", null);
+        return new StandardRs("Messages marked as read", true);
     }
 }
