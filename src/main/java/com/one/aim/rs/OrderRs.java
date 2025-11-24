@@ -15,28 +15,16 @@ import lombok.Setter;
 @NoArgsConstructor
 public class OrderRs implements Serializable {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	private String docId;
+    private String docId;
+    private String orderId;
 
-	private Long totalAmount;
-
-	// private String Pname;
-
-	private String paymentMethod;
-
-	private LocalDateTime orderTime;
-
-	private UserRs user;
-
-//	@OneToOne(cascade = CascadeType.ALL)
-//	@JoinColumn(name = "address_id")
-//	private AddressBO shippingAddress;
-
-//	@OneToMany(cascade = CascadeType.ALL)
-//	@JoinColumn(name = "order_id")
-	private List<CartRs> orderedItems;
-
-	private String orderStatus;
+    private Long totalAmount;
+    private String paymentMethod;
+    private LocalDateTime orderTime;
+    private UserRs user;
+    private List<CartRs> orderedItems;
+    private String orderStatus;
 
 }

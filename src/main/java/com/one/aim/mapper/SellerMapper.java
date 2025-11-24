@@ -15,31 +15,33 @@ import lombok.extern.slf4j.Slf4j;
 public class SellerMapper {
 
     public static SellerRs mapToSellerRs(SellerBO bo) {
-        if (bo == null) {
-            log.warn("SellerBO is NULL");
-            return null;
-        }
+
+        if (bo == null) return null;
 
         SellerRs rs = new SellerRs();
 
         rs.setDocId(String.valueOf(bo.getId()));
+        rs.setSellerId(bo.getSellerId());
+
         rs.setUserName(bo.getFullName());
+        rs.setEmail(bo.getEmail());
         rs.setPhoneNo(bo.getPhoneNo());
-        rs.setPanCard(bo.getPanCard());
         rs.setGst(bo.getGst());
         rs.setAdhaar(bo.getAdhaar());
-        rs.setEmail(bo.getEmail());
+        rs.setPanCard(bo.getPanCard());
         rs.setRole(bo.getRole());
         rs.setVerified(bo.isVerified());
+        rs.setLocked(bo.isLocked());
+        rs.setEmailVerified(bo.isEmailVerified());
+        rs.setCreatedAt(bo.getCreatedAt());
 
-        //  Handle image reference (via fileService)
         if (bo.getImageFileId() != null) {
-            rs.setImageUrl("/api/files/" + bo.getImageFileId() + "/view");
+            rs.setImageUrl("/api/files/private/" + bo.getImageFileId() + "/view");
         }
-
 
         return rs;
     }
+
 
     public static List<SellerRs> mapToSellerRsList(List<SellerBO> bos) {
         if (bos == null || bos.isEmpty()) {
@@ -51,6 +53,4 @@ public class SellerMapper {
                 .map(SellerMapper::mapToSellerRs)
                 .toList();
     }
-
 }
-

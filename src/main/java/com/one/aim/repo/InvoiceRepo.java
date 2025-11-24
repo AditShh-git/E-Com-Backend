@@ -10,7 +10,9 @@ import java.util.Optional;
 @Repository
 public interface InvoiceRepo extends JpaRepository<InvoiceBO, Long> {
 
-    Optional<InvoiceBO> findByOrder_Id(Long orderId);
+//    Optional<InvoiceBO> findByOrder_Id(String orderId);
+
+    Optional<InvoiceBO> findByOrder_OrderId(String orderId);
 
 //    List<InvoiceBO> findAllBySeller_Id(Long sellerId);
 //    List<InvoiceBO> findAllBySeller_Id(Long sellerId);

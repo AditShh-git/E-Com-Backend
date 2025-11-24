@@ -4,12 +4,16 @@ import com.one.aim.bo.AdminBO;
 import com.one.aim.bo.FileBO;
 import com.one.aim.bo.InvoiceBO;
 import com.one.aim.bo.OrderBO;
+import com.one.aim.mapper.InvoiceMapper;
 import com.one.aim.repo.AdminRepo;
 import com.one.aim.repo.FileRepo;
 import com.one.aim.repo.InvoiceRepo;
 import com.one.aim.rq.LoginRq;
+import com.one.aim.rs.AdminInvoiceRs;
+import com.one.aim.rs.InvoiceRs;
 import com.one.aim.service.AuthService;
 import com.one.aim.service.InvoiceService;
+import com.one.utils.AuthUtils;
 import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 import lombok.RequiredArgsConstructor;
@@ -40,13 +44,16 @@ import java.util.stream.Collectors;
 public class AdminController {
 
     private final AdminService adminService;
-    private final InvoiceRepo invoiceRepo;
+    private final InvoiceService invoiceService;
     private final FileRepo fileRepo;
 
     // ============================================================
     // CREATE ADMIN (REGISTER)
     // ============================================================
-    @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(
+            value = "/create",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
     public ResponseEntity<BaseRs> createAdmin(
             @ModelAttribute AdminRq rq,
             @RequestParam(value = "file", required = false) MultipartFile file
@@ -54,33 +61,37 @@ public class AdminController {
 
         log.debug("Executing [POST /api/admin/create]");
 
-        if (file != null && !file.isEmpty()) {
-            rq.setImage(file.getBytes());
-        }
 
-        log.info("Admin registration request for email: {}", rq.getEmail());
+        if (file != null && !file.isEmpty()) {
+            rq.setImage(file);
+        }
 
         return ResponseEntity.ok(adminService.createAdmin(rq));
     }
+
+
 
     // ============================================================
     // UPDATE ADMIN
     // ============================================================
     @PreAuthorize("hasAuthority('ADMIN')")
-    @PutMapping(value = "/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PutMapping(
+            value = "/update",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
     public ResponseEntity<BaseRs> updateAdmin(
             @ModelAttribute AdminRq rq,
             @RequestParam(value = "file", required = false) MultipartFile file
     ) throws Exception {
 
-        log.debug("Executing [PUT /api/admin/update]");
-
         if (file != null && !file.isEmpty()) {
-            rq.setImage(file.getBytes());
+            rq.setImage(file);
         }
 
         return ResponseEntity.ok(adminService.updateAdmin(rq));
     }
+
+
 
     // ============================================================
     // GET ADMIN PROFILE
@@ -92,81 +103,24 @@ public class AdminController {
         return ResponseEntity.ok(adminService.retrieveAdmin());
     }
 
-//    // ============================================================
-//    // ADMIN LOGOUT
-//    // ============================================================
-//    @PreAuthorize("hasAuthority('ADMIN')")
-//    @PostMapping("/logout")
-//    public ResponseEntity<BaseRs> adminLogout() throws Exception {
-//        log.debug("Executing [POST /api/admin/logout]");
-//        return ResponseEntity.ok(adminService.logout());
-//    }
+    // =====================================================================
+    //  ADMIN → Get ALL invoices
+    // =====================================================================
+    @GetMapping("invoice/all")
+    public List<AdminInvoiceRs> getAllInvoicesForAdmin() {
 
-//    // ============================================================
-//    // DOWNLOAD INVOICE
-//    // ============================================================
-//    @PreAuthorize("hasAuthority('ADMIN')")
-//    @GetMapping(
-//            value = "/download/{orderId}",
-//            produces = MediaType.APPLICATION_PDF_VALUE
-//    )
-//    public ResponseEntity<byte[]> downloadInvoiceForAdmin(@PathVariable Long orderId) throws Exception {
-//
-//        InvoiceBO invoice = invoiceRepo.findByOrder_Id(orderId)
-//                .orElseThrow(() -> new RuntimeException("Invoice not found"));
-//
-//        FileBO file = fileRepo.findById(invoice.getInvoiceFileId())
-//                .orElseThrow(() -> new RuntimeException("Invoice PDF file missing"));
-//
-//        if (file.getInputstream() == null) {
-//            throw new RuntimeException("PDF content empty");
-//        }
-//
-//        HttpHeaders headers = new HttpHeaders();
-//        headers.setContentType(MediaType.APPLICATION_PDF);
-//        headers.setContentDisposition(
-//                ContentDisposition.attachment()
-//                        .filename("invoice-" + invoice.getInvoiceNumber() + ".pdf")
-//                        .build()
-//        );
-//
-//        return new ResponseEntity<>(file.getInputstream(), headers, HttpStatus.OK);
-//    }
-//
-//    // ============================================================
-//    // VIEW ALL INVOICES LIST
-//    // ============================================================
-//    @PreAuthorize("hasAuthority('ADMIN')")
-//    @GetMapping("/all/invoices")
-//    public ResponseEntity<?> getAllInvoicesForAdmin() {
-//
-//        List<InvoiceBO> invoices = invoiceRepo.findAll();
-//
-//        List<Map<String, Object>> response = invoices.stream().map(inv -> {
-//
-//            OrderBO order = inv.getOrder();
-//
-//            // Collect list of seller names
-//            String sellers = order.getCartItems().stream()
-//                    .map(ci -> ci.getProduct().getSeller().getFullName())
-//                    .distinct()
-//                    .collect(Collectors.joining(", "));
-//
-//            Map<String, Object> map = new HashMap<>();
-//            map.put("invoiceId", inv.getId());
-//            map.put("invoiceNo", inv.getInvoiceNumber());
-//            map.put("orderId", order.getId());
-//            map.put("amount", order.getTotalAmount());
-//            map.put("user", inv.getUser().getFullName());
-//            map.put("sellers", sellers);   // ✔ multi-seller safe
-//            map.put("date", inv.getCreatedAt());
-//            map.put("downloadUrl", "/api/admin/download/" + order.getId());
-//
-//            return map;
-//
-//        }).collect(Collectors.toList());
-//
-//        return ResponseEntity.ok(response);
-//    }
+        String role = AuthUtils.findLoggedInUser().getRoll();
+
+        if (!"ADMIN".equalsIgnoreCase(role)) {
+            throw new RuntimeException("Not allowed.");
+        }
+
+        return invoiceService.getAllInvoicesForAdmin()
+                .stream()
+                .map(InvoiceMapper::toAdminDto)
+                .toList();
+    }
+
+
 
 }

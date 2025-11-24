@@ -15,18 +15,13 @@ import lombok.Setter;
 @NoArgsConstructor
 public class AdminRs implements Serializable {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	private String docId = StringConstants.EMPTY;
+    private String docId;
+    private String userName;
+    private String email;
+    private String phoneNo;
+    private String roll;
 
-	private String userName;
-
-	private String email;
-
-	private String phoneNo;
-
-	private String roll;
-
-	// private List<AttachmentRs> atts = Collections.emptyList();
-	private byte[] image;
+    private String imageUrl;
 }

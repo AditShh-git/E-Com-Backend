@@ -12,31 +12,50 @@ public class AuthUtils implements Serializable {
 
     private static final long serialVersionUID = -5948653276588477749L;
 
+    // ==========================================================
+    // Get Logged User ID
+    // ==========================================================
     public static Long getLoggedUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
         if (auth == null || !(auth.getPrincipal() instanceof UserDetailsImpl)) {
             return null;
         }
+
         return ((UserDetailsImpl) auth.getPrincipal()).getId();
     }
 
+    // ==========================================================
+    // Get Logged User Email
+    // ==========================================================
     public static String getLoggedUserEmail() {
+
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
         if (auth == null || !(auth.getPrincipal() instanceof UserDetailsImpl)) {
             return null;
         }
+
         return ((UserDetailsImpl) auth.getPrincipal()).getUsername();
     }
 
+    // ==========================================================
+    // Get Logged User Role
+    // ==========================================================
     public static String getLoggedUserRole() {
+
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
         if (auth == null || !(auth.getPrincipal() instanceof UserDetailsImpl)) {
             return null;
         }
+
         return ((UserDetailsImpl) auth.getPrincipal()).getRole();
     }
 
-    // Your existing method (unchanged)
+    // ==========================================================
+    // Get Logged User Details → UserRs (used everywhere)
+    // ==========================================================
     public static UserRs findLoggedInUser() {
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -55,6 +74,4 @@ public class AuthUtils implements Serializable {
 
         return rs;
     }
-
-
 }

@@ -1,7 +1,18 @@
 package com.one.aim.service.impl;
 
+import com.one.aim.bo.AdminBO;
+import com.one.aim.bo.SellerBO;
+import com.one.aim.bo.UserBO;
+import com.one.aim.constants.ErrorCodes;
+import com.one.aim.repo.AdminRepo;
+import com.one.aim.repo.SellerRepo;
+import com.one.aim.repo.UserRepo;
 import com.one.aim.service.EmailService;
 import com.one.exception.EmailSendFailedException;
+import com.one.service.impl.UserDetailsImpl;
+import com.one.utils.TokenUtils;
+import com.one.vm.core.BaseRs;
+import com.one.vm.utils.ResponseUtils;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +22,11 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -18,6 +34,9 @@ import org.springframework.stereotype.Service;
 public class EmailServiceImpl implements EmailService {
 
     private final JavaMailSender mailSender;
+    private final UserRepo userRepo;
+    private final SellerRepo sellerRepo;
+    private final AdminRepo adminRepo;
 
     @Value("${app.frontend.url:http://localhost:3000}")
     private String frontendUrl;
@@ -25,8 +44,235 @@ public class EmailServiceImpl implements EmailService {
     @Value("${spring.mail.username:noreply@oneaim.com}")
     private String fromEmail;
 
+
+
     // ===========================================================
-    //  Verification Email
+    // CHECK EMAIL VERIFIED (Used during login)
+    // ===========================================================
+    @Override
+    public void checkEmailVerified(UserDetailsImpl userDetails) {
+        if (userDetails.isEmailVerified()) return;
+        throw new RuntimeException("Please verify your email before logging in.");
+    }
+
+
+
+    // ===========================================================
+    // VERIFY EMAIL (User + Seller + Admin)
+    // ===========================================================
+    @Override
+    @Transactional
+    public BaseRs verifyEmail(String token, String email) {
+
+        String cleanEmail = email.trim().toLowerCase();
+
+        // --------------------------------------
+        // USER
+        // --------------------------------------
+        Optional<UserBO> userOpt = userRepo.findByEmail(cleanEmail);
+        if (userOpt.isPresent()) {
+            UserBO user = userOpt.get();
+
+            if (!token.equals(user.getVerificationToken()))
+                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN);
+
+            if (isExpired(user.getVerificationTokenExpiry()))
+                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
+
+            if (user.getPendingEmail() != null) {
+                user.setEmail(user.getPendingEmail());
+                user.setPendingEmail(null);
+            }
+
+            user.setEmailVerified(true);
+            user.setActive(true);
+            user.setVerificationToken(null);
+            user.setVerificationTokenExpiry(null);
+
+            userRepo.save(user);
+            return ResponseUtils.success("Email verified successfully.");
+        }
+
+
+        // --------------------------------------
+        // SELLER
+        // --------------------------------------
+        Optional<SellerBO> sellerOpt = sellerRepo.findByEmailIgnoreCase(cleanEmail);
+        if (sellerOpt.isPresent()) {
+
+            SellerBO seller = sellerOpt.get();
+
+            if (!token.equals(seller.getVerificationToken()))
+                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN);
+
+            if (isExpired(seller.getVerificationTokenExpiry()))
+                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
+
+            if (seller.getPendingEmail() != null) {
+                seller.setEmail(seller.getPendingEmail());
+                seller.setPendingEmail(null);
+            }
+
+            seller.setEmailVerified(true);
+            seller.setLocked(false); // can login now
+            seller.setVerified(false); // admin approval still needed
+
+            seller.setVerificationToken(null);
+            seller.setVerificationTokenExpiry(null);
+
+            sellerRepo.save(seller);
+
+            sendSellerUnderReviewEmail(seller.getEmail(), seller.getFullName());
+
+            return ResponseUtils.success(
+                    "Seller email verified. You can login. Admin approval required for product operations."
+            );
+        }
+
+
+        // --------------------------------------
+        // ADMIN
+        // --------------------------------------
+        Optional<AdminBO> adminOpt = adminRepo.findByEmailIgnoreCase(cleanEmail);
+        if (adminOpt.isPresent()) {
+
+            AdminBO admin = adminOpt.get();
+
+            if (!token.equals(admin.getVerificationToken()))
+                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN);
+
+            if (isExpired(admin.getVerificationTokenExpiry()))
+                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
+
+            admin.setEmailVerified(true);
+            admin.setActive(true);
+            admin.setVerificationToken(null);
+            admin.setVerificationTokenExpiry(null);
+
+            adminRepo.save(admin);
+
+            return ResponseUtils.success("Admin email verified successfully.");
+        }
+
+        return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND, "Email not registered.");
+    }
+
+
+
+    // ===========================================================
+    // RESEND VERIFICATION EMAIL (User + Seller + Admin)
+    // ===========================================================
+    @Override
+    @Transactional
+    public BaseRs resendVerificationEmail(String email) {
+
+        String cleanEmail = email.trim().toLowerCase();
+        String newToken = UUID.randomUUID().toString();
+
+        // USER
+        Optional<UserBO> userOpt = userRepo.findByEmail(cleanEmail);
+        if (userOpt.isPresent()) {
+
+            UserBO user = userOpt.get();
+
+            if (user.getEmailVerified())
+                return ResponseUtils.failure(ErrorCodes.EC_EMAIL_ALREADY_VERIFIED);
+
+            user.setVerificationToken(newToken);
+            user.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+            userRepo.save(user);
+
+            sendVerificationEmail(user.getEmail(), user.getFullName(), newToken);
+            return ResponseUtils.success("Verification email sent.");
+        }
+
+        // SELLER
+        Optional<SellerBO> sellerOpt = sellerRepo.findByEmailIgnoreCase(cleanEmail);
+        if (sellerOpt.isPresent()) {
+
+            SellerBO seller = sellerOpt.get();
+
+            if (seller.isEmailVerified())
+                return ResponseUtils.failure(ErrorCodes.EC_EMAIL_ALREADY_VERIFIED);
+
+            seller.setVerificationToken(newToken);
+            seller.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+            sellerRepo.save(seller);
+
+            sendVerificationEmail(seller.getEmail(), seller.getFullName(), newToken);
+            return ResponseUtils.success("Verification email sent.");
+        }
+
+        // ADMIN
+        Optional<AdminBO> adminOpt = adminRepo.findByEmailIgnoreCase(cleanEmail);
+        if (adminOpt.isPresent()) {
+
+            AdminBO admin = adminOpt.get();
+
+            if (admin.isEmailVerified())
+                return ResponseUtils.failure(ErrorCodes.EC_EMAIL_ALREADY_VERIFIED);
+
+            admin.setVerificationToken(newToken);
+            admin.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+            adminRepo.save(admin);
+
+            sendVerificationEmail(admin.getEmail(), admin.getFullName(), newToken);
+            return ResponseUtils.success("Verification email sent.");
+        }
+
+        return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND, "Email not registered.");
+    }
+
+
+
+    // ===========================================================
+    // EMAIL CHANGE (User / Seller / Admin)
+    // ===========================================================
+    @Override
+    public void initiateUserEmailChange(UserBO user, String newEmail) {
+        String token = TokenUtils.generateVerificationToken();
+
+        user.setPendingEmail(newEmail);
+        user.setVerificationToken(token);
+        user.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+
+        userRepo.save(user);
+        sendVerificationEmail(newEmail, user.getFullName(), token);
+    }
+
+
+    @Override
+    public void initiateSellerEmailChange(SellerBO seller, String newEmail) {
+        String token = TokenUtils.generateVerificationToken();
+
+        seller.setPendingEmail(newEmail);
+        seller.setVerificationToken(token);
+        seller.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+        seller.setEmailVerified(false);
+        seller.setLocked(true);
+
+        sellerRepo.save(seller);
+        sendVerificationEmail(newEmail, seller.getFullName(), token);
+    }
+
+
+    @Override
+    public void initiateAdminEmailChange(AdminBO admin, String newEmail) {
+        String token = TokenUtils.generateVerificationToken();
+
+        admin.setEmail(newEmail);
+        admin.setVerificationToken(token);
+        admin.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+        admin.setEmailVerified(false);
+
+        adminRepo.save(admin);
+        sendVerificationEmail(newEmail, admin.getFullName(), token);
+    }
+
+
+
+    // ===========================================================
+    // EMAIL SENDING FUNCTIONS
     // ===========================================================
     @Async
     public void sendVerificationEmail(String toEmail, String fullName, String token) {
@@ -36,55 +282,99 @@ public class EmailServiceImpl implements EmailService {
             String htmlContent = buildVerificationEmailTemplate(fullName, verificationLink);
 
             sendHtmlEmail(toEmail, subject, htmlContent);
-            log.info(" Verification email sent successfully to: {}", toEmail);
 
         } catch (Exception e) {
-            log.error(" Failed to send verification email to: {}", toEmail, e);
-            throw new EmailSendFailedException("Unable to send verification email. Please try again later.");
+            log.error("Failed to send verification email to {}", toEmail, e);
+            throw new EmailSendFailedException("Unable to send verification email.");
         }
     }
 
-    // ===========================================================
-    //  Reset Password Email
-    // ===========================================================
+
     @Async
     public void sendResetPasswordEmail(String toEmail, String token) {
         try {
-            String resetUrl = frontendUrl + "/reset-password?token=" + token;
-            String subject = "Reset your password";
-            String htmlContent = buildResetPasswordEmailTemplate(resetUrl);
+            String resetURL = frontendUrl + "/reset-password?token=" + token;
+            String html = buildResetPasswordEmailTemplate(resetURL);
 
-            sendHtmlEmail(toEmail, subject, htmlContent);
-            log.info(" Password reset email sent to {}", toEmail);
+            sendHtmlEmail(toEmail, "Reset Password", html);
 
         } catch (Exception e) {
-            log.error(" Failed to send reset password email: {}", e.getMessage());
-            throw new EmailSendFailedException("Unable to send password reset email. Please try again later.");
+            throw new EmailSendFailedException("Unable to send reset password email.");
         }
     }
 
-    // ===========================================================
-    //  Welcome Email
-    // ===========================================================
+
     @Async
     public void sendWelcomeEmail(String toEmail, String fullName) {
         try {
-            String subject = "Welcome to OneAim! 🎉";
-            String htmlContent = buildWelcomeEmailTemplate(fullName);
-
-            sendHtmlEmail(toEmail, subject, htmlContent);
-            log.info(" Welcome email sent successfully to: {}", toEmail);
+            String html = buildWelcomeEmailTemplate(fullName);
+            sendHtmlEmail(toEmail, "Welcome to OneAim 🎉", html);
 
         } catch (Exception e) {
-            log.error(" Failed to send welcome email to: {}", toEmail, e);
-            throw new EmailSendFailedException("Unable to send welcome email. Please try again later.");
+            throw new EmailSendFailedException("Unable to send welcome email.");
         }
     }
 
+
+
     // ===========================================================
-    //  Reusable HTML Mail Sender
+    // SELLER SPECIAL EMAILS
     // ===========================================================
-    private void sendHtmlEmail(String to, String subject, String htmlContent) throws MessagingException {
+    @Override
+    @Async
+    public void sendSellerUnderReviewEmail(String toEmail, String fullName) {
+
+        String subject = "Seller Account Under Review";
+        String html = """
+            <html><body style='font-family: Arial'>
+                <h2>Hello %s,</h2>
+                <p>Your email has been verified successfully.</p>
+                <p>Your seller account is now <b>under review</b>.</p>
+                <p>Admin approval usually takes <b>3–7 days</b>.</p>
+                <br>
+                <p>Regards,<br>Team OneAim</p>
+            </body></html>
+        """.formatted(fullName);
+
+        try {
+            sendHtmlEmail(toEmail, subject, html);
+        } catch (Exception e) {
+            log.error("Failed to send Seller Under Review email", e);
+        }
+    }
+
+
+    @Override
+    @Async
+    public void sendSellerApprovalEmail(String toEmail, String fullName) {
+
+        String subject = "Seller Account Approved 🎉";
+
+        String html = """
+            <html><body style='font-family: Arial'>
+                <h2>Congratulations %s! 🎉</h2>
+                <p>Your seller account has been <b>approved by admin</b>.</p>
+                <p>You can now start publishing your products on OneAim.</p>
+                <br>
+                <p>Best Wishes,<br>Team OneAim</p>
+            </body></html>
+        """.formatted(fullName);
+
+        try {
+            sendHtmlEmail(toEmail, subject, html);
+        } catch (Exception e) {
+            log.error("Failed to send Seller Approval email", e);
+        }
+    }
+
+
+
+    // ===========================================================
+    // COMMON HTML EMAIL SENDER
+    // ===========================================================
+    private void sendHtmlEmail(String to, String subject, String htmlContent)
+            throws MessagingException {
+
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
@@ -96,115 +386,57 @@ public class EmailServiceImpl implements EmailService {
         mailSender.send(message);
     }
 
-    // ===========================================================
-    //  Templates
-    // ===========================================================
 
-    //  Verification Template
-    private String buildVerificationEmailTemplate(String fullName, String verificationLink) {
+
+    // ===========================================================
+    // EMAIL TEMPLATES
+    // ===========================================================
+    private String buildVerificationEmailTemplate(String fullName, String link) {
         return """
-                <html>
-                <body style="font-family: Arial, sans-serif; color: #333;">
-                    <h2>Hi %s,</h2>
-                    <p>Thank you for signing up with <strong>OneAim Platform</strong>! Please verify your email by clicking the button below:</p>
-                    <p style="text-align: center;">
-                        <a href="%s" style="background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-                            Verify Email
-                        </a>
-                    </p>
-                    <p>This link will expire in 15 minutes.</p>
-                    <p>Thanks,<br>Team OneAim</p>
-                </body>
-                </html>
-                """.formatted(fullName, verificationLink);
+            <html><body style='font-family: Arial'>
+                <h2>Hello %s,</h2>
+                <p>Click the button below to verify your email:</p>
+                <p style='text-align:center'>
+                    <a href='%s' style='padding:10px 20px;background:#007BFF;color:#fff;border-radius:5px;text-decoration:none'>Verify Email</a>
+                </p>
+                <p>This link expires in 24 hours.</p>
+            </body></html>
+        """.formatted(fullName, link);
     }
 
-    //  Reset Password Template
-    private String buildResetPasswordEmailTemplate(String resetUrl) {
+
+    private String buildResetPasswordEmailTemplate(String resetURL) {
         return """
-                <html>
-                <body style="font-family: Arial, sans-serif; color: #333;">
-                    <h2>Password Reset Request</h2>
-                    <p>We received a request to reset your password for your <strong>OneAim</strong> account.</p>
-                    <p style="text-align: center;">
-                        <a href="%s" style="background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-                            Reset Password
-                        </a>
-                    </p>
-                    <p>This link will expire in 15 minutes. If you didn’t request this, please ignore this email.</p>
-                    <p>Thanks,<br>Team OneAim</p>
-                </body>
-                </html>
-                """.formatted(resetUrl);
+            <html><body style='font-family: Arial'>
+                <h2>Reset Your Password</h2>
+                <p>Click below to reset your password:</p>
+                <p style='text-align:center'>
+                    <a href='%s' style='padding:10px 20px;background:#28a745;color:white;text-decoration:none;border-radius:5px'>
+                        Reset Password
+                    </a>
+                </p>
+                <p>If you didn't request this, ignore this email.</p>
+            </body></html>
+        """.formatted(resetURL);
     }
 
-    //  Welcome Template
+
     private String buildWelcomeEmailTemplate(String fullName) {
         return """
-                <html>
-                <body style="font-family: Arial, sans-serif; color: #333;">
-                    <h2>Welcome, %s </h2>
-                    <p>We’re thrilled to have you on board! Explore the OneAim platform and make the most out of your journey.</p>
-                    <p>Start your journey here:</p>
-                    <p style="text-align: center;">
-                        <a href="%s" style="background-color: #007BFF; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-                            Go to OneAim
-                        </a>
-                    </p>
-                    <p>Have questions? Just reply to this email — we’re here to help.</p>
-                    <p>Cheers,<br>Team OneAim </p>
-                </body>
-                </html>
-                """.formatted(fullName, frontendUrl);
+            <html><body style='font-family: Arial'>
+                <h2>Welcome %s 🎉</h2>
+                <p>Thank you for joining OneAim.</p>
+                <p>We’re excited to have you onboard!</p>
+            </body></html>
+        """.formatted(fullName);
     }
+
+
 
     // ===========================================================
-//  Seller → Email Verified & Under Review
-// ===========================================================
-    @Async
-    public void sendSellerUnderReviewEmail(String toEmail, String fullName) {
-
-        String subject = "Email Verified - Seller Account Under Review";
-        String html = """
-            <html><body style='font-family: Arial;'>
-            <h2>Hello %s,</h2>
-            <p>Your email has been successfully verified.</p>
-            <p>Your seller account is now <strong>under review</strong>. Our team will verify your documents and approve your account within 3–7 days.</p>
-            <br>
-            <p>Thanks,<br>Team OneAim</p>
-            </body></html>
-            """.formatted(fullName);
-
-        try {
-            sendHtmlEmail(toEmail, subject, html);
-        } catch (Exception e) {
-            log.error("Failed to send Seller Under Review email", e);
-        }
-    }
-
+    // EXPIRY CHECK
     // ===========================================================
-//  Admin → Seller Approved Email
-// ===========================================================
-    @Async
-    public void sendSellerApprovalEmail(String toEmail, String fullName) {
-
-        String subject = "Congratulations! Your Seller Account is Approved 🎉";
-        String html = """
-            <html><body style='font-family: Arial;'>
-            <h2>Congratulations %s! 🎉</h2>
-            <p>Your seller account has been successfully verified and approved by the admin.</p>
-            <p>You can now log in and start selling your products on OneAim.</p>
-            <br>
-            <p>Best wishes,<br>Team OneAim</p>
-            </body></html>
-            """.formatted(fullName);
-
-        try {
-            sendHtmlEmail(toEmail, subject, html);
-        } catch (Exception e) {
-            log.error("Failed to send Seller Approval email", e);
-        }
+    private boolean isExpired(LocalDateTime expiry) {
+        return expiry == null || expiry.isBefore(LocalDateTime.now());
     }
-
 }
-

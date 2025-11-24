@@ -1,20 +1,28 @@
 package com.one.aim.service.impl;
 
-import java.io.IOException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
+import com.one.aim.bo.FileBO;
 import com.one.aim.rq.UpdateRq;
+import com.one.aim.rq.UserFilterRequest;
+import com.one.aim.rs.UserPageResponse;
+import com.one.aim.rs.data.UserDataRsList;
 import com.one.aim.service.EmailService;
+import com.one.utils.PhoneUtils;
 import com.one.utils.TokenUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import com.one.aim.bo.AdminBO;
 import com.one.aim.bo.UserBO;
 import com.one.aim.constants.ErrorCodes;
 import com.one.aim.constants.MessageCodes;
@@ -27,7 +35,6 @@ import com.one.aim.repo.UserSessionRepo;
 import com.one.aim.rq.UserRq;
 import com.one.aim.rs.UserRs;
 import com.one.aim.rs.data.UserDataRs;
-import com.one.aim.rs.data.UserDataRsList;
 import com.one.aim.service.FileService;
 import com.one.aim.service.UserService;
 import com.one.security.jwt.JwtUtils;
@@ -68,21 +75,29 @@ public class UserServiceImpl implements UserService {
 
         String email = rq.getEmail().trim().toLowerCase();
 
+        // GLOBAL EMAIL CHECK
         if (adminRepo.findByEmailIgnoreCase(email).isPresent()
                 || userRepo.findByEmailIgnoreCase(email).isPresent()
                 || sellerRepo.findByEmailIgnoreCase(email).isPresent()) {
             return ResponseUtils.failure("EMAIL_EXISTS", "Email already registered with another account.");
         }
 
+        // Phone
+        String phone = PhoneUtils.normalize(rq.getPhoneNo());
+        if (userRepo.existsByPhoneNo(phone) ||
+                sellerRepo.existsByPhoneNo(phone) ||
+                adminRepo.existsByPhoneNo(phone)) {
+            return ResponseUtils.failure("PHONE_EXISTS", "Phone number already registered.");
+        }
 
         // Create new user
         UserBO user = new UserBO();
         user.setFullName(rq.getFullName());
         user.setEmail(email);
-        user.setPhoneNo(Utils.getValidString(rq.getPhoneNo()));
+        user.setPhoneNo(phone);
         user.setRole("USER");
-        user.setEmailVerified(false);   // must verify email
-        user.setActive(false);          // inactive until email verification
+        user.setEmailVerified(false);
+        user.setActive(false);
         user.setLogin(false);
 
         // Password
@@ -92,10 +107,13 @@ public class UserServiceImpl implements UserService {
 
         // Profile image
         if (rq.getImage() != null && !rq.getImage().isEmpty()) {
-            user.setImage(rq.getImage().getBytes());
+            FileBO uploaded = fileService.uploadAndReturnFile(rq.getImage());
+            user.setImageFileId(uploaded.getId());
         }
 
-        // Create verification token
+        // --------------------------------------------------------
+        // EMAIL VERIFICATION (Correct centralized logic)
+        // --------------------------------------------------------
         String token = TokenUtils.generateVerificationToken();
         user.setVerificationToken(token);
         user.setVerificationTokenExpiry(TokenUtils.generateExpiry());
@@ -116,6 +134,9 @@ public class UserServiceImpl implements UserService {
                 )
         );
     }
+
+
+
 
 
     // ===========================================================
@@ -141,10 +162,6 @@ public class UserServiceImpl implements UserService {
         }
     }
 
-
-    // ===========================================================
-    // RETRIEVE ALL USERS (ADMIN)
-    // ===========================================================
     @Override
     public BaseRs retrieveAllUser() {
 
@@ -172,6 +189,7 @@ public class UserServiceImpl implements UserService {
     }
 
 
+
     // ===========================================================
     // DELETE USER (ADMIN ONLY)
     // ===========================================================
@@ -179,27 +197,31 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public BaseRs deleteUser(String id) {
 
-        try {
-            // Admin validation
-            if (adminRepo.findById(AuthUtils.findLoggedInUser().getDocId()).isEmpty()) {
-                return ResponseUtils.failure(ErrorCodes.EC_ACCESS_DENIED);
-            }
-
-            UserBO user = userRepo.findById(Long.valueOf(id))
-                    .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_USER_NOT_FOUND));
-
-            userRepo.delete(user);
-
-            return ResponseUtils.success(
-                    new UserDataRs(MessageCodes.MC_DELETED_SUCCESSFUL,
-                            UserMapper.mapToUserRs(user))
-            );
-
-        } catch (Exception e) {
-            log.error("deleteUser() error ->", e);
-            return ResponseUtils.failure(ErrorCodes.EC_INTERNAL_ERROR, e.getMessage());
+        Long adminId = AuthUtils.findLoggedInUser().getDocId();
+        if (adminRepo.findById(adminId).isEmpty()) {
+            return ResponseUtils.failure(ErrorCodes.EC_ACCESS_DENIED);
         }
+
+        UserBO user = userRepo.findById(Long.valueOf(id))
+                .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_USER_NOT_FOUND));
+
+        if (!user.isActive()) {
+            return ResponseUtils.failure("USER_ALREADY_INACTIVE", "User already deleted.");
+        }
+
+        // soft delete
+        user.setActive(false);
+        user.setLogin(false);         // logout
+        user.setEmailVerified(false); // disable email login
+
+        userRepo.save(user);
+
+        return ResponseUtils.success(
+                new UserDataRs(MessageCodes.MC_DELETED_SUCCESSFUL,
+                        UserMapper.mapToUserRs(user))
+        );
     }
+
 
 
     // ===========================================================
@@ -214,42 +236,49 @@ public class UserServiceImpl implements UserService {
 
         boolean updated = false;
 
-        // -------------------------
-        // FULL NAME
-        // -------------------------
+        // Full name
         if (Utils.isNotEmpty(rq.getFullName())) {
             user.setFullName(rq.getFullName());
             updated = true;
         }
 
-        // -------------------------
-        // PHONE NUMBER
-        // -------------------------
+        // Phone number
         if (Utils.isNotEmpty(rq.getPhoneNo())) {
 
-            if (!rq.getPhoneNo().matches("^[6-9]\\d{9}$")) {
+            String normalized = PhoneUtils.normalize(rq.getPhoneNo());
+
+            if (!normalized.matches("^[6-9]\\d{9}$")) {
                 return ResponseUtils.failure("EC_INVALID_PHONE", "Invalid mobile number.");
             }
 
-            user.setPhoneNo(rq.getPhoneNo());
-            updated = true;
+            if (!normalized.equals(user.getPhoneNo())) {
+
+                boolean exists =
+                        userRepo.existsByPhoneNo(normalized) ||
+                                sellerRepo.existsByPhoneNo(normalized) ||
+                                adminRepo.existsByPhoneNo(normalized);
+
+                if (exists) {
+                    return ResponseUtils.failure("PHONE_EXISTS", "Phone number already registered.");
+                }
+
+                user.setPhoneNo(normalized);
+                updated = true;
+            }
         }
 
-        // -------------------------
-        // PROFILE IMAGE
-        // -------------------------
+        // Image
         if (rq.getImage() != null && !rq.getImage().isEmpty()) {
             try {
-                user.setImage(rq.getImage().getBytes());
+                FileBO uploaded = fileService.uploadAndReturnFile(rq.getImage());
+                user.setImageFileId(uploaded.getId());
             } catch (Exception e) {
-                return ResponseUtils.failure("EC_INVALID_IMAGE", "Unable to process the image.");
+                return ResponseUtils.failure("EC_INVALID_IMAGE", "Unable to upload profile image.");
             }
             updated = true;
         }
 
-        // -------------------------
-        // PASSWORD CHANGE
-        // -------------------------
+        // Password update
         if (rq.hasPasswordUpdate()) {
 
             if (!rq.isPasswordDataValid()) {
@@ -264,83 +293,76 @@ public class UserServiceImpl implements UserService {
             updated = true;
         }
 
-        // -------------------------
-        // EMAIL CHANGE → NEEDS VERIFICATION
-        // -------------------------
+
+        // ---------------------------------------------------------
+        // EMAIL CHANGE (shifted to EmailService)
+        // ---------------------------------------------------------
         if (Utils.isNotEmpty(rq.getEmail()) &&
                 !rq.getEmail().equalsIgnoreCase(user.getEmail())) {
 
-            String newEmail = rq.getEmail().toLowerCase();
+            String newEmail = rq.getEmail().trim().toLowerCase();
 
-            // Duplicate check
-            if (userRepo.findByEmail(newEmail).isPresent()) {
+            boolean emailExists =
+                    userRepo.findByEmailIgnoreCase(newEmail).isPresent() ||
+                            sellerRepo.findByEmailIgnoreCase(newEmail).isPresent() ||
+                            adminRepo.findByEmailIgnoreCase(newEmail).isPresent();
+
+            if (emailExists) {
                 return ResponseUtils.failure("EMAIL_ALREADY_IN_USE", "Email already registered.");
             }
 
-            // New verification token
-            String token = TokenUtils.generateVerificationToken();
-
-            user.setPendingEmail(newEmail);
-            user.setVerificationToken(token);
-            user.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+            //  CALL EmailService
+            emailService.initiateUserEmailChange(user, newEmail);
 
             userRepo.save(user);
 
-            emailService.sendVerificationEmail(
-                    newEmail,
-                    user.getFullName(),
-                    token
-            );
-
-            return ResponseUtils.success("Verification email sent. Please verify to complete email update.");
+            return ResponseUtils.success("Verification email sent. Please verify your new email.");
         }
 
-        // -------------------------
-        // Save updates
-        // -------------------------
+
+        // SAVE CHANGES
         if (updated) {
             userRepo.save(user);
             return ResponseUtils.success("Profile updated successfully.");
         }
 
-        return ResponseUtils.failure("NO_CHANGES", "No valid fields provided to update.");
+        return ResponseUtils.failure("NO_CHANGES", "No valid fields provided.");
     }
 
-
-    // ===========================================================
-    // VERIFY EMAIL (for signup + email update)
-    // ===========================================================
-    @Override
-    @Transactional
-    public BaseRs verifyEmail(String token) {
-
-        UserBO user = userRepo.findByVerificationToken(token)
-                .orElse(null);
-
-        if (user == null) {
-            return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN, "Invalid verification token.");
-        }
-
-        if (user.getVerificationTokenExpiry() == null ||
-                user.getVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
-            return ResponseUtils.failure("TOKEN_EXPIRED", "Verification token has expired.");
-        }
-
-        // If this verification was for an email update
-        if (Utils.isNotEmpty(user.getPendingEmail())
-                && !user.getPendingEmail().equalsIgnoreCase(user.getEmail())) {
-            user.setEmail(user.getPendingEmail());
-            user.setPendingEmail(null);
-        }
-
-        // Mark email verified
-        user.setEmailVerified(true);
-        user.setActive(true);
-        user.setVerificationToken(null);
-        user.setVerificationTokenExpiry(null);
-
-        userRepo.save(user);
-
-        return ResponseUtils.success("Email verified successfully.");
-    }
+//    // ===========================================================
+//    // VERIFY EMAIL (for signup + email update)
+//    // ===========================================================
+//    @Override
+//    @Transactional
+//    public BaseRs verifyEmail(String token) {
+//
+//        UserBO user = userRepo.findByVerificationToken(token)
+//                .orElse(null);
+//
+//        if (user == null) {
+//            return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN, "Invalid verification token.");
+//        }
+//
+//        if (user.getVerificationTokenExpiry() == null ||
+//                user.getVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
+//            return ResponseUtils.failure("TOKEN_EXPIRED", "Verification token has expired.");
+//        }
+//
+//        // If this verification was for an email update
+//        if (Utils.isNotEmpty(user.getPendingEmail())
+//                && !user.getPendingEmail().equalsIgnoreCase(user.getEmail())) {
+//            user.setEmail(user.getPendingEmail());
+//            user.setPendingEmail(null);
+//        }
+//
+//        // Mark email verified
+//        user.setEmailVerified(true);
+//        user.setActive(true);
+//        user.setVerificationToken(null);
+//        user.setVerificationTokenExpiry(null);
+//
+//        userRepo.save(user);
+//
+//        return ResponseUtils.success("Email verified successfully.");
+//    }
 }

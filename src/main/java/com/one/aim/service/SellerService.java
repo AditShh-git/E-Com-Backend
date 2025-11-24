@@ -1,6 +1,7 @@
 package com.one.aim.service;
 
 import com.one.aim.bo.SellerBO;
+import com.one.aim.rq.SellerFilterRequest;
 import com.one.aim.rq.SellerRq;
 import com.one.aim.rq.UpdateRq;
 import com.one.vm.core.BaseRs;
@@ -22,6 +23,7 @@ public interface SellerService {
     // ===========================================================
     BaseRs retrieveSellers() throws Exception;
 
+
     // ===========================================================
     // RETRIEVE SELLER CARTS (Seller-only)
     // ===========================================================
@@ -32,17 +34,17 @@ public interface SellerService {
     // ===========================================================
     BaseRs deleteSeller(String id) throws Exception;
 
-    // ===========================================================
-    // EMAIL VERIFICATION (Signup + Email change)
-    // ===========================================================
-    void sendVerificationEmail(SellerBO seller);
-
-    BaseRs verifyEmail(String token) throws Exception;
+//    // ===========================================================
+//    // EMAIL VERIFICATION (Signup + Email change)
+//    // ===========================================================
+//    void sendVerificationEmail(SellerBO seller);
+//
+//    BaseRs verifyEmail(String token) throws Exception;
 
     // ===========================================================
     // ADMIN APPROVAL EMAIL
     // ===========================================================
-    void sendAdminApprovalEmail(SellerBO seller);
+//    void sendAdminApprovalEmail(SellerBO seller);
 
     // ===========================================================
     // UPDATE SELLER PROFILE

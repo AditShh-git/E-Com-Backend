@@ -6,15 +6,10 @@ import com.one.aim.repo.AdminRepo;
 import com.one.aim.repo.SellerRepo;
 import com.one.aim.repo.UserRepo;
 import com.one.aim.repo.VendorRepo;
-import com.one.security.LoggedUserContext;
 import com.one.service.impl.UserDetailsImpl;
-import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -49,9 +44,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
         try {
             String path = request.getRequestURI();
 
-            // ===========================================================
-            //  Skip authentication for public endpoints
-            // ===========================================================
+            // Public routes — skip auth
             if (path.contains("/api/auth/signin") ||
                     path.contains("/api/auth/signup") ||
                     path.contains("/api/auth/refresh") ||
@@ -61,68 +54,47 @@ public class AuthTokenFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // ===========================================================
-            //  Extract Bearer Token from Authorization header
-            // ===========================================================
+            // Extract JWT
             String token = getTokenFromRequest(request);
 
             if (StringUtils.hasText(token) && jwtUtils.validateToken(token)) {
 
-                // -----------------------------------------------------------
-                //  Extract EMAIL from token
-                // -----------------------------------------------------------
                 String email = jwtUtils.getEmailFromToken(token);
 
-                if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                if (email != null &&
+                        SecurityContextHolder.getContext().getAuthentication() == null) {
 
+                    // Load UserDetails (User/Seller/Admin/Vendor)
                     UserDetailsImpl userDetails =
                             (UserDetailsImpl) userDetailsService.loadUserByUsername(email);
 
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
-                                    userDetails, null, userDetails.getAuthorities()
+                                    userDetails,
+                                    null,
+                                    userDetails.getAuthorities()
                             );
 
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    authentication.setDetails(
+                            new WebAuthenticationDetailsSource().buildDetails(request)
+                    );
+
+                    // Store authentication in SecurityContext
                     SecurityContextHolder.getContext().setAuthentication(authentication);
 
-                    // ===========================================================
-                    // STORE LOGGED USER DETAILS FOR THIS REQUEST
-                    // ===========================================================
-                    Long id = null;
-                    String role = userDetails.getRole();
-
-                    switch (role) {
-                        case "USER":
-                            id = userRepo.findByEmail(email).get().getId();
-                            break;
-                        case "ADMIN":
-                            id = adminRepo.findByEmail(email).get().getId();
-                            break;
-                        case "SELLER":
-                            id = sellerRepo.findByEmail(email).get().getId();
-                            break;
-                        case "VENDOR":
-                            id = vendorRepo.findByEmail(email).get().getId();
-                            break;
-                    }
-
-                    LoggedUserContext.setLoggedUserId(id);
-                    LoggedUserContext.setLoggedUserRole(role);
-
-                    log.info(" Authenticated [{}] ({})", role, email);
+                    log.info("Authenticated [{}] ({})", userDetails.getRole(), email);
                 }
             }
 
             filterChain.doFilter(request, response);
 
         } catch (Exception e) {
-            log.error(" Unexpected error in JWT filter: {}", e.getMessage());
-        } finally {
-            // ALWAYS CLEAR THREADLOCAL
-            LoggedUserContext.clear();
+            log.error("Unexpected error in JWT filter: {}", e.getMessage());
+            filterChain.doFilter(request, response);
+
         }
     }
+
 
 
     // ===========================================================

@@ -327,6 +327,18 @@ public class FileServiceImpl implements FileService {
         return fileRepo.save(file);
     }
 
+    @Override
+    public FileBO getFile(String id) throws Exception {
+
+        FileBO fileBO = fileRepo.findByIdAndEnabledIsTrue(Long.valueOf(id));
+
+        if (fileBO == null) {
+            throw new FileNotFoundException("File not found");
+        }
+
+        return fileBO;
+    }
+
 
 
 }

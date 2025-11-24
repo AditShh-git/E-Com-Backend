@@ -12,11 +12,9 @@ import com.one.aim.rs.ResetPasswordRs;
 import com.one.aim.rs.data.LoginDataRs;
 import com.one.aim.service.AuthService;
 import com.one.aim.service.EmailService;
-import com.one.security.LoggedUserContext;
 import com.one.security.jwt.JwtUtils;
 import com.one.service.impl.UserDetailsImpl;
 import com.one.utils.AuthUtils;
-import com.one.vm.core.BaseDataRs;
 import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 import lombok.RequiredArgsConstructor;
@@ -30,8 +28,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -46,7 +42,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final JavaMailSender javaMailSender;
-    private final EmailService emailService;
+    private final EmailService emailService;   // All email logic centralized here
 
     // ============================================================
     // SIGN IN (User + Seller + Admin)
@@ -55,38 +51,18 @@ public class AuthServiceImpl implements AuthService {
     public BaseRs signIn(Authentication authentication) throws Exception {
 
         UserDetailsImpl user = (UserDetailsImpl) authentication.getPrincipal();
-        String role = user.getRole();
 
-        // -------------------------------------------------------
-        // BLOCK 1: Email verification check (all roles)
-        // -------------------------------------------------------
-        if (!user.isEmailVerified()) {
-            return ResponseUtils.failure(
-                    ErrorCodes.EC_ACCOUNT_NOT_VERIFIED,
-                    "Please verify your email before logging in."
-            );
-        }
+        // CENTRALIZED EMAIL VERIFIED CHECK
+        emailService.checkEmailVerified(user);
 
-        // -------------------------------------------------------
-        // BLOCK 2: Seller-specific checks
-        // -------------------------------------------------------
-        if ("SELLER".equals(role)) {
+        // SELLER LOGIN CHECKS
+        if ("SELLER".equals(user.getRole())) {
 
             SellerBO seller = sellerRepo.findById(user.getId()).orElse(null);
-
             if (seller == null) {
                 return ResponseUtils.failure("SELLER_NOT_FOUND");
             }
 
-            // Admin approval check
-            if (!seller.isVerified()) {
-                return ResponseUtils.failure(
-                        ErrorCodes.EC_ACCOUNT_NOT_VERIFIED,
-                        "Your seller account is pending admin approval."
-                );
-            }
-
-            // Locked account check
             if (seller.isLocked()) {
                 return ResponseUtils.failure(
                         ErrorCodes.EC_ACCOUNT_LOCKED,
@@ -95,43 +71,52 @@ public class AuthServiceImpl implements AuthService {
             }
         }
 
-        // -------------------------------------------------------
-        // BLOCK 3: Admin-specific check (optional)
-        // -------------------------------------------------------
-        if ("ADMIN".equals(role)) {
+        // ADMIN LOGIN CHECKS
+        if ("ADMIN".equals(user.getRole())) {
 
             AdminBO admin = adminRepo.findById(user.getId()).orElse(null);
 
             if (admin == null) {
                 return ResponseUtils.failure("ADMIN_NOT_FOUND");
             }
-
-            if (!admin.isEmailVerified()) {
-                return ResponseUtils.failure(
-                        ErrorCodes.EC_ACCOUNT_NOT_VERIFIED,
-                        "Please verify your admin email before logging in."
-                );
-            }
         }
 
-        // -------------------------------------------------------
-        // IF ALL CHECKS PASS → Generate JWT Tokens
-        // -------------------------------------------------------
+        // GENERATE TOKENS
         String accessToken = jwtUtils.generateAccessToken(authentication);
         String refreshToken = jwtUtils.generateRefreshToken(authentication);
 
-        return ResponseUtils.success(
-                new LoginDataRs(
-                        MessageCodes.MC_LOGIN_SUCCESSFUL,
-                        accessToken,
-                        refreshToken,
-                        user.getId(),
-                        user.getEmail(),
-                        user.getFullName(),
-                        user.getRole()
-                )
-        );
+        LoginDataRs rs = new LoginDataRs(MessageCodes.MC_LOGIN_SUCCESSFUL);
+        rs.setAccessToken(accessToken);
+        rs.setRefreshToken(refreshToken);
+
+        // ----------------------------------------------------
+        // CUSTOM RESPONSE FOR SELLER LOGIN
+        // ----------------------------------------------------
+        if ("SELLER".equals(user.getRole())) {
+            SellerBO seller = sellerRepo.findById(user.getId()).orElse(null);
+
+            rs.setSellerId(seller.getSellerId());  // <-------- SELLER ID FIELD
+            rs.setUsername(seller.getEmail());
+            rs.setFullname(seller.getFullName());
+            rs.setEmail(seller.getEmail());
+            rs.setRole("SELLER");
+
+            return ResponseUtils.success(rs);
+        }
+
+        // ----------------------------------------------------
+        // NORMAL RESPONSE for USER and ADMIN
+        // ----------------------------------------------------
+        rs.setEmpId(user.getId());
+        rs.setUsername(user.getEmail());
+        rs.setFullname(user.getFullName());
+        rs.setEmail(user.getEmail());
+        rs.setRole(user.getRole());
+
+        return ResponseUtils.success(rs);
     }
+
+
 
 
     // ============================================================
@@ -196,6 +181,8 @@ public class AuthServiceImpl implements AuthService {
         );
     }
 
+
+
     // ============================================================
     // RESET PASSWORD (User + Seller + Admin)
     // ============================================================
@@ -207,12 +194,8 @@ public class AuthServiceImpl implements AuthService {
         Optional<SellerBO> sellerOpt = Optional.empty();
         Optional<AdminBO> adminOpt = Optional.empty();
 
-        if (userOpt.isEmpty()) {
-            sellerOpt = sellerRepo.findByResetToken(token);
-        }
-        if (userOpt.isEmpty() && sellerOpt.isEmpty()) {
-            adminOpt = adminRepo.findByResetToken(token);
-        }
+        if (userOpt.isEmpty()) sellerOpt = sellerRepo.findByResetToken(token);
+        if (userOpt.isEmpty() && sellerOpt.isEmpty()) adminOpt = adminRepo.findByResetToken(token);
 
         if (userOpt.isEmpty() && sellerOpt.isEmpty() && adminOpt.isEmpty()) {
             return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN, "Invalid or expired token");
@@ -227,6 +210,7 @@ public class AuthServiceImpl implements AuthService {
             user.setResetToken(null);
             user.setResetTokenExpiry(null);
             userRepo.save(user);
+
         } else if (sellerOpt.isPresent()) {
             SellerBO seller = sellerOpt.get();
             if (isExpired(seller.getResetTokenExpiry())) {
@@ -236,6 +220,7 @@ public class AuthServiceImpl implements AuthService {
             seller.setResetToken(null);
             seller.setResetTokenExpiry(null);
             sellerRepo.save(seller);
+
         } else {
             AdminBO admin = adminOpt.get();
             if (isExpired(admin.getResetTokenExpiry())) {
@@ -254,209 +239,66 @@ public class AuthServiceImpl implements AuthService {
         return expiry == null || expiry.isBefore(LocalDateTime.now());
     }
 
+
+
     // ============================================================
-    // LOGOUT (User + Seller + Admin)
+    // LOGOUT
     // ============================================================
     @Transactional
     @Override
     public BaseRs logout() {
 
-        Long id = LoggedUserContext.getLoggedUserId();
-        String role = LoggedUserContext.getLoggedUserRole();
+        Long id = AuthUtils.getLoggedUserId();
+        String role = AuthUtils.getLoggedUserRole();
+
+        if (id == null) {
+            return ResponseUtils.failure("NOT_LOGGED_IN", "No active session found.");
+        }
 
         if ("USER".equalsIgnoreCase(role)) {
             userRepo.findById(id).ifPresent(u -> {
                 u.setLogin(false);
                 userRepo.save(u);
             });
-        } else if ("SELLER".equalsIgnoreCase(role)) {
+        }
+
+        if ("SELLER".equalsIgnoreCase(role)) {
             sellerRepo.findById(id).ifPresent(s -> {
                 s.setLogin(false);
                 sellerRepo.save(s);
             });
-        } else if ("ADMIN".equalsIgnoreCase(role)) {
+        }
+
+        if ("ADMIN".equalsIgnoreCase(role)) {
             adminRepo.findById(id).ifPresent(a -> {
                 a.setLogin(false);
                 adminRepo.save(a);
             });
         }
 
-        LoggedUserContext.clear();
         SecurityContextHolder.clearContext();
 
         return ResponseUtils.success(MessageCodes.MC_LOGOUT_SUCCESSFUL);
     }
 
+
+
     // ============================================================
-    // VERIFY EMAIL (User + Seller + Admin)
+    // VERIFY EMAIL (DELEGATED)
     // ============================================================
     @Override
     @Transactional
     public BaseRs verifyEmail(String token, String email) {
-
-        String cleanEmail = email.trim().toLowerCase();
-
-        Optional<UserBO> userOpt = userRepo.findByEmail(cleanEmail);
-        Optional<SellerBO> sellerOpt = Optional.empty();
-        Optional<AdminBO> adminOpt = Optional.empty();
-
-        if (userOpt.isEmpty()) {
-            sellerOpt = sellerRepo.findByEmailIgnoreCase(cleanEmail);
-        }
-        if (userOpt.isEmpty() && sellerOpt.isEmpty()) {
-            adminOpt = adminRepo.findByEmailIgnoreCase(cleanEmail);
-        }
-
-        if (userOpt.isEmpty() && sellerOpt.isEmpty() && adminOpt.isEmpty()) {
-            return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND, "Email not found");
-        }
-
-        // USER
-        if (userOpt.isPresent()) {
-            UserBO user = userOpt.get();
-
-            if (!token.equals(user.getVerificationToken())) {
-                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN, "Invalid token");
-            }
-            if (isExpired(user.getVerificationTokenExpiry())) {
-                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED, "Verification link expired");
-            }
-
-            if (user.getPendingEmail() != null && !user.getPendingEmail().isBlank()) {
-                user.setEmail(user.getPendingEmail().toLowerCase());
-                user.setPendingEmail(null);
-            }
-
-            user.setEmailVerified(true);
-            user.setVerificationToken(null);
-            user.setVerificationTokenExpiry(null);
-            if (!user.isActive()) {
-                user.setActive(true);
-            }
-
-            userRepo.save(user);
-            return ResponseUtils.success("Email verified successfully.");
-        }
-
-        // SELLER
-        if (sellerOpt.isPresent()) {
-            SellerBO seller = sellerOpt.get();
-
-            if (!token.equals(seller.getVerificationToken())) {
-                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN, "Invalid token");
-            }
-            if (isExpired(seller.getVerificationTokenExpiry())) {
-                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED, "Verification link expired");
-            }
-
-            seller.setEmailVerified(true);
-            seller.setLocked(true);  // still locked until admin approves
-            seller.setVerificationToken(null);
-            seller.setVerificationTokenExpiry(null);
-
-            sellerRepo.save(seller);
-
-            emailService.sendSellerUnderReviewEmail(
-                    seller.getEmail(),
-                    seller.getFullName()
-            );
-
-            return ResponseUtils.success("Seller email verified. Account under review.");
-        }
-
-        // ADMIN
-        AdminBO admin = adminOpt.get();
-
-        if (!token.equals(admin.getVerificationToken())) {
-            return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN, "Invalid token");
-        }
-        if (isExpired(admin.getVerificationTokenExpiry())) {
-            return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED, "Verification link expired");
-        }
-
-        admin.setEmailVerified(true);
-        admin.setActive(true);
-        admin.setVerificationToken(null);
-        admin.setVerificationTokenExpiry(null);
-
-        adminRepo.save(admin);
-
-        return ResponseUtils.success("Admin email verified successfully.");
+        return emailService.verifyEmail(token, email);
     }
 
+
     // ============================================================
-    // RESEND VERIFICATION EMAIL (User + Seller + Admin)
+    // RESEND VERIFICATION EMAIL (DELEGATED)
     // ============================================================
     @Override
     @Transactional
     public BaseRs resendVerificationEmail(String email) {
-
-        String cleanEmail = email.trim().toLowerCase();
-
-        Optional<UserBO> userOpt = userRepo.findByEmail(cleanEmail);
-        Optional<SellerBO> sellerOpt = Optional.empty();
-        Optional<AdminBO> adminOpt = Optional.empty();
-
-        if (userOpt.isEmpty()) {
-            sellerOpt = sellerRepo.findByEmailIgnoreCase(cleanEmail);
-        }
-        if (userOpt.isEmpty() && sellerOpt.isEmpty()) {
-            adminOpt = adminRepo.findByEmailIgnoreCase(cleanEmail);
-        }
-
-        if (userOpt.isEmpty() && sellerOpt.isEmpty() && adminOpt.isEmpty()) {
-            return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND, "Email not registered");
-        }
-
-        String newToken = UUID.randomUUID().toString();
-
-        // USER
-        if (userOpt.isPresent()) {
-            UserBO user = userOpt.get();
-
-            if (user.getEmailVerified()) {
-                return ResponseUtils.failure(ErrorCodes.EC_EMAIL_ALREADY_VERIFIED, "Email already verified.");
-            }
-
-            user.setVerificationToken(newToken);
-            user.setVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
-            userRepo.save(user);
-
-            emailService.sendVerificationEmail(user.getEmail(), user.getFullName(), newToken);
-
-            return ResponseUtils.success("Verification email sent.");
-        }
-
-        // SELLER
-        if (sellerOpt.isPresent()) {
-            SellerBO seller = sellerOpt.get();
-
-            if (seller.isEmailVerified()) {
-                return ResponseUtils.failure(ErrorCodes.EC_EMAIL_ALREADY_VERIFIED, "Email already verified.");
-            }
-
-            seller.setVerificationToken(newToken);
-            seller.setVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
-            sellerRepo.save(seller);
-
-            emailService.sendVerificationEmail(seller.getEmail(), seller.getFullName(), newToken);
-
-            return ResponseUtils.success("Verification email sent.");
-        }
-
-        // ADMIN
-        AdminBO admin = adminOpt.get();
-
-        if (admin.isEmailVerified()) {
-            return ResponseUtils.failure(ErrorCodes.EC_EMAIL_ALREADY_VERIFIED, "Email already verified.");
-        }
-
-        admin.setVerificationToken(newToken);
-        admin.setVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
-        adminRepo.save(admin);
-
-        emailService.sendVerificationEmail(admin.getEmail(), admin.getFullName(), newToken);
-
-        return ResponseUtils.success("Verification email sent.");
+        return emailService.resendVerificationEmail(email);
     }
 }

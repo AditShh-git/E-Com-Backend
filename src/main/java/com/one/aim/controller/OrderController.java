@@ -2,9 +2,8 @@ package com.one.aim.controller;
 
 import com.one.aim.bo.OrderBO;
 import com.one.aim.repo.OrderRepo;
-import com.one.security.LoggedUserContext;
+import com.one.utils.AuthUtils;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -103,20 +102,20 @@ public class OrderController {
     @GetMapping("/invoice/{fileName:.+}")
     public ResponseEntity<?> downloadInvoice(@PathVariable String fileName) {
         try {
-            Long loggedInUserId = LoggedUserContext.getLoggedUserId();
-            String role = LoggedUserContext.getLoggedUserRole();
+            Long loggedInUserId = AuthUtils.getLoggedUserId();
+            String role = AuthUtils.getLoggedUserRole();
 
             if (loggedInUserId == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body("Unauthorized access");
             }
 
-            // Validate filename
+            // Validate filename (avoid path traversal)
             if (!fileName.matches("[A-Za-z0-9._-]+\\.pdf")) {
                 return ResponseEntity.badRequest().body("Invalid filename");
             }
 
-            // Extract invoice number
+            // Extract invoice number (without .pdf)
             String invoiceNo = fileName.replace(".pdf", "");
             OrderBO order = orderRepo.findByInvoiceno(invoiceNo);
 
@@ -138,8 +137,6 @@ public class OrderController {
                     break;
 
                 case "SELLER":
-                case "VENDOR":
-                    // Seller/Vendor is allowed only if THEIR product was sold
                     allowed = order.getCartItems().stream()
                             .anyMatch(c -> c.getProduct() != null
                                     && c.getProduct().getSeller() != null
@@ -157,7 +154,7 @@ public class OrderController {
             }
 
             // ----------------------------------------------------
-            // FETCH PDF FILE
+            // READ PDF FILE
             // ----------------------------------------------------
             Path base = Paths.get(System.getProperty("user.dir"),
                     "uploads", "downloads", "invoices");

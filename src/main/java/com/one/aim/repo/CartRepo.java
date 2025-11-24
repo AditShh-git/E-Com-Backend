@@ -23,7 +23,7 @@ public interface CartRepo extends JpaRepository<CartBO, Long> {
     // SELLER CARTS
     // (sellerId is stored as Long inside CartBO)
     // -----------------------------
-    List<CartBO> findAllBySellerId(Long sellerId);
+    List<CartBO> findAllBySellerId(String sellerId);
 
     // -----------------------------
     // SEARCH carts by product name
@@ -39,6 +39,11 @@ public interface CartRepo extends JpaRepository<CartBO, Long> {
     List<CartBO> findAllByEnabledTrue();
 
     Collection<Object> findByUserAddToCart_Id(Long userId);
+
+
+    List<CartBO> findAllByUserAddToCartIdAndEnabledTrue(Long userId);
+
+    Optional<CartBO> findByUserAddToCart_IdAndProduct_IdAndEnabledTrue(Long userId, Long productId);
 
     // -----------------------------
     // Category search (if needed)

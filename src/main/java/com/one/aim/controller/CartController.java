@@ -64,13 +64,13 @@ public class CartController {
         return ResponseEntity.ok(cartService.getMyCart());
     }
 
-    // ==========================================================
-    // PLACE ORDER (AFTER CART)
-    // ==========================================================
-    @PostMapping("/place-order")
-    public ResponseEntity<?> placeOrder() throws Exception {
-
-        log.debug("Executing [POST /api/cart/place-order]");
-        return ResponseEntity.ok(cartService.placeOrder());
-    }
+//    // ==========================================================
+//    // PLACE ORDER (AFTER CART)
+//    // ==========================================================
+//    @PostMapping("/place-order")
+//    public ResponseEntity<?> placeOrder() throws Exception {
+//
+//        log.debug("Executing [POST /api/cart/place-order]");
+//        return ResponseEntity.ok(cartService.placeOrder());
+//    }
 }

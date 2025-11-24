@@ -39,7 +39,7 @@ public class AdminBO {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    @Column(length = 15)
+    @Column(length = 15,unique = true)
     private String phoneNo;
 
     @Column(nullable = false)
@@ -53,9 +53,9 @@ public class AdminBO {
     @Builder.Default
     private boolean login = false;
 
-    @Lob
-    @Column(name = "image", columnDefinition = "LONGBLOB")
-    private byte[] image;
+
+    @Column(name = "image")
+    private Long imageId;
 
     // ===========================================================
     // EMAIL VERIFICATION + ACTIVE STATUS

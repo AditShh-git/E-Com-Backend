@@ -1,8 +1,6 @@
 package com.one.aim.service.impl;
 
 import com.itextpdf.html2pdf.HtmlConverter;
-import com.itextpdf.kernel.pdf.PdfDocument;
-import com.itextpdf.kernel.pdf.PdfWriter;
 import com.one.aim.bo.*;
 import com.one.aim.controller.OrderNotificationController;
 import com.one.aim.mapper.OrderMapper;
@@ -13,29 +11,24 @@ import com.one.aim.service.FileService;
 import com.one.aim.service.InvoiceService;
 import com.one.aim.service.OrderService;
 import com.one.utils.AuthUtils;
-import com.one.utils.InvoiceGenerator;
 import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class OrderServiceImpl implements OrderService {
 
-    private final InvoiceGenerator invoiceGenerator;
+//    private final InvoiceGenerator invoiceGenerator;
     private final OrderRepo orderRepo;
     private final CartRepo cartRepo;
     private final UserRepo userRepo;
@@ -60,46 +53,45 @@ public class OrderServiceImpl implements OrderService {
     public BaseRs placeOrder(OrderRq rq) throws Exception {
 
         Long userId = AuthUtils.findLoggedInUser().getDocId();
-        if (userId == null) throw new RuntimeException("User not authenticated");
-
-        if (rq.getTotalCarts() == null || rq.getTotalCarts().isEmpty()) {
-            throw new RuntimeException("Cart is empty");
+        if (userId == null) {
+            throw new RuntimeException("User not authenticated");
         }
 
-        List<CartBO> cartItems = new ArrayList<>();
-        long totalAmount = 0;
+        // ------------------------------------------------------------
+        // LOAD CART ITEMS (only enabled = true)
+        // ------------------------------------------------------------
+        List<CartBO> cartItems = cartRepo.findAllByUserAddToCartIdAndEnabledTrue(userId);
+
+        if (cartItems == null || cartItems.isEmpty()) {
+            return ResponseUtils.failure("CART_EMPTY", "Your cart is empty.");
+        }
+
+        long totalAmount = 0L;
 
         // ------------------------------------------------------------
-        // BUILD CART LIST + VALIDATE STOCK
+        // VALIDATE STOCK + UPDATE STOCK + CALCULATE TOTAL
         // ------------------------------------------------------------
-        for (Map.Entry<String, Integer> entry : rq.getTotalCarts().entrySet()) {
+        for (CartBO cart : cartItems) {
 
-            Long cartId = Long.valueOf(entry.getKey());
-            int qtyRequested = entry.getValue();
-
-            CartBO cartBO = cartRepo.findById(cartId)
-                    .orElseThrow(() -> new RuntimeException("Invalid cart ID: " + cartId));
-
-            ProductBO product = cartBO.getProduct();
-            if (product == null) throw new RuntimeException("Product missing for cart ID: " + cartId);
+            ProductBO product = cart.getProduct();
+            if (product == null) {
+                throw new RuntimeException("Product missing for cart id: " + cart.getId());
+            }
 
             int available = product.getStock() == null ? 0 : product.getStock();
-            int qtyToUse = qtyRequested > 0 ? qtyRequested : cartBO.getQuantity();
+            int qty = cart.getQuantity() <= 0 ? 1 : cart.getQuantity();
 
-            if (available < qtyToUse) {
+            if (available < qty) {
                 throw new RuntimeException("Insufficient stock for: " + product.getName());
             }
 
-            // Reduce stock
-            product.setStock(available - qtyToUse);
+            // update stock
+            product.setStock(available - qty);
             product.updateLowStock();
             productRepo.save(product);
 
-            // Freeze quantity for invoice
-            cartBO.setQuantity(qtyToUse);
-
-            totalAmount += cartBO.getPrice() * qtyToUse;
-            cartItems.add(cartBO);
+            // line total
+            totalAmount += cart.getPrice() * qty;
         }
 
         // ------------------------------------------------------------
@@ -117,19 +109,11 @@ public class OrderServiceImpl implements OrderService {
         addressRepo.save(address);
 
         // ------------------------------------------------------------
-        // DISABLE ORDERED CART ITEMS
-        // ------------------------------------------------------------
-        for (CartBO item : cartItems) item.setEnabled(false);
-        cartRepo.saveAll(cartItems);
-
-        // Remove from user's Add-To-Cart
-        UserBO user = userRepo.findById(userId).orElseThrow();
-        user.getAddtoCart().removeIf(c -> cartItems.stream().anyMatch(o -> o.getId().equals(c.getId())));
-        userRepo.save(user);
-
-        // ------------------------------------------------------------
         // CREATE ORDER
+        //  - orderId is generated in @PrePersist
         // ------------------------------------------------------------
+        UserBO user = userRepo.findById(userId).orElseThrow();
+
         OrderBO order = new OrderBO();
         order.setUser(user);
         order.setOrderStatus("INITIAL");
@@ -139,21 +123,31 @@ public class OrderServiceImpl implements OrderService {
         order.setOrderTime(LocalDateTime.now());
         order.setTotalAmount(totalAmount);
         order.setShippingAddress(address);
+
+        // link existing, managed carts (NO new CartBO here)
         order.setCartItems(cartItems);
 
-        // Seller for order (first product seller)
-        SellerBO seller = findSellerFromOrder(order);
-
-        // Invoice number
-        String invoiceNo = "AIM" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+        // invoice no (separate from orderId field)
+        String invoiceNo = "AIM" +
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
         order.setInvoiceno(invoiceNo);
 
+        // persist order (and join table order_cart_items)
         orderRepo.save(order);
 
         // ------------------------------------------------------------
-        // GENERATE AND STORE PDF
+        // DISABLE CART ITEMS (LOGICAL CLEAR)
+        //  -> DO NOT touch user.getAddtoCart() collection here
         // ------------------------------------------------------------
-        String html = invoiceService.downloadInvoiceHtml(order.getId());
+        for (CartBO cart : cartItems) {
+            cart.setEnabled(false);
+        }
+        cartRepo.saveAll(cartItems);
+
+        // ------------------------------------------------------------
+        // GENERATE AND STORE INVOICE PDF
+        // ------------------------------------------------------------
+        String html = invoiceService.downloadInvoiceHtml(order.getOrderId());
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         HtmlConverter.convertToPdf(html, out);
@@ -161,9 +155,6 @@ public class OrderServiceImpl implements OrderService {
 
         FileBO pdfFile = fileService.uploadBytes(pdfBytes, invoiceNo + ".pdf");
 
-        // ------------------------------------------------------------
-        // SAVE INVOICE ENTRY
-        // ------------------------------------------------------------
         InvoiceBO invoice = InvoiceBO.builder()
                 .order(order)
                 .user(order.getUser())
@@ -171,19 +162,20 @@ public class OrderServiceImpl implements OrderService {
                 .invoiceFileId(pdfFile.getId())
                 .build();
 
-
         invoiceRepo.save(invoice);
 
         // ------------------------------------------------------------
         // RESPONSE
         // ------------------------------------------------------------
         Map<String, Object> data = new HashMap<>();
-        data.put("orderId", order.getId());
+        data.put("orderId", order.getId());        // DB id
+        data.put("orderCode", order.getOrderId()); // business order code
         data.put("invoiceNo", invoiceNo);
         data.put("totalAmount", totalAmount);
 
         return ResponseUtils.success(data);
     }
+
 
 
 
