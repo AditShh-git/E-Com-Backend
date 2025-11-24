@@ -30,10 +30,19 @@ public class PaymentBO {
 	private String paymentMethod; // PHONEPE / PAYTM
 
 	private LocalDateTime paymentTime;
-	
-	private String userid;
+    private String razorpayOrderId;
+    private String razorpayPaymentId;
+    private String status;   // PAID, FAILED
+
+
+    private String userid;
 
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "user_id")
 	private UserBO user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id")
+    private OrderBO order;
+
 }

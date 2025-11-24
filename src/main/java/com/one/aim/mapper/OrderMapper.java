@@ -39,12 +39,17 @@ public class OrderMapper {
 
         rs.setTotalAmount(totalAmount);
         rs.setOrderTime(bo.getOrderTime());
+
+
         rs.setPaymentMethod(bo.getPaymentMethod());
+        rs.setPaymentStatus(bo.getPaymentStatus());
+
         rs.setUser(UserMapper.mapToUserRs(bo.getUser()));
         rs.setOrderStatus(bo.getOrderStatus());
 
         return rs;
     }
+
 
 
 

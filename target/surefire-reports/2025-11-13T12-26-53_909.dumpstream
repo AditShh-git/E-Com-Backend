@@ -1,5 +1,0 @@
-# Created at 2025-11-13T12:26:54.086
-Boot Manifest-JAR contains absolute paths in classpath 'E:\WebArcLight\e-com-website-main\target\test-classes'
-Hint: <argLine>-Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
-'other' has different root
-

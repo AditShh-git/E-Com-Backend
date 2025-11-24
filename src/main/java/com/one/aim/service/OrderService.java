@@ -17,6 +17,6 @@ public interface OrderService {
 
 	public BaseRs retrieveAllOrders() throws Exception;
 
-	public BaseRs retrieveOrdersCancel(String orderId) throws Exception;
+    BaseRs cancelOrder(String orderId) throws Exception;
 
 }

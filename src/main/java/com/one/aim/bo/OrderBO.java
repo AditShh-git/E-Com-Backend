@@ -3,7 +3,6 @@ package com.one.aim.bo;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import jakarta.persistence.*;
@@ -38,7 +37,6 @@ public class OrderBO {
     private String orderId;
 
     private Long totalAmount;
-    private String paymentMethod;   // COD, UPI, CARD
     private LocalDateTime orderTime;
 
     private String orderStatus;     // INITIAL, CONFIRMED, SHIPPED, DELIVERED
@@ -59,14 +57,23 @@ public class OrderBO {
     )
     private List<CartBO> cartItems = new ArrayList<>();
 
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<OrderItemBO> orderItems = new ArrayList<>();
+
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "delivery_person_id")
     private DeliveryPersonBO deliveryPerson;
 
     private String deliveryStatus;
-    private String paymentStatus;
 
+    private String paymentMethod;   // COD, UPI, CARD
+    private String paymentStatus;
+    private String razorpayPaymentId;
+    private String razorpaySignature;
     private String razorpayorderid;
+
+
     private String invoiceno;
 
     @CreationTimestamp

@@ -21,10 +21,11 @@ public class OrderRs implements Serializable {
     private String orderId;
 
     private Long totalAmount;
-    private String paymentMethod;
+    private String paymentMethod;      
+    private String paymentStatus;
     private LocalDateTime orderTime;
     private UserRs user;
     private List<CartRs> orderedItems;
     private String orderStatus;
-
 }
+

@@ -271,7 +271,7 @@ public class SellerServiceImpl implements SellerService {
             return ResponseUtils.failure(ErrorCodes.EC_ACCESS_DENIED);
         }
 
-        //  FIXED: use sellerId string, not numeric ID
+        //  use sellerId string, not numeric ID
         SellerBO seller = sellerRepo.findBySellerId(id)
                 .orElseThrow(() -> new RuntimeException(ErrorCodes.EC_SELLER_NOT_FOUND));
 

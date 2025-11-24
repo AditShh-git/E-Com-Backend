@@ -71,7 +71,7 @@ public interface EmailService {
     /**
      * Verifies the email using token + email (User + Seller + Admin).
      */
-    BaseRs verifyEmail(String token, String email);
+//    BaseRs verifyEmail(String token, String email);
 
     /**
      * Resends verification email to User/Seller/Admin.

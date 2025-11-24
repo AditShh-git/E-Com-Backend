@@ -21,5 +21,7 @@ public interface ProductRepo extends JpaRepository<ProductBO, Long> {
     Page<ProductBO> findByNameContainingIgnoreCase(String name, Pageable pageable);
 
     boolean existsBySlug(String slug);
+    
+    long count();
 
 }

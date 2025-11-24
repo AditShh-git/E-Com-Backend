@@ -47,7 +47,8 @@ public class CartServiceImpl implements CartService {
     private final UserRepo userRepo;
     private final ProductRepo productRepo;
     private final InvoiceService  invoiceService;
-    private final FileService fileService;   // REQUIRED for CartMapper
+    private final UserActivityService userActivityService;
+    private final FileService fileService;
 
     // ==========================================================
     // ADD PRODUCT TO CART  (Flipkart Style)
@@ -64,9 +65,9 @@ public class CartServiceImpl implements CartService {
         ProductBO product = productRepo.findById(productId)
                 .orElseThrow(() -> new RuntimeException("Product not found"));
 
-        // Find active cart entry
+        // Find active cart entry  UPDATED
         Optional<CartBO> existingOpt =
-                cartRepo.findByUserAddToCart_IdAndProduct_IdAndEnabledTrue(userId, productId);
+                cartRepo.findByUserAddToCart_IdAndProduct_IdAndEnabled(userId, productId, true);
 
         if (existingOpt.isPresent()) {
             CartBO existing = existingOpt.get();
@@ -90,6 +91,13 @@ public class CartServiceImpl implements CartService {
         cart.setSellerId(product.getSeller().getSellerId());
 
         cartRepo.save(cart);
+
+        userActivityService.log(
+                userId,
+                "ADD_TO_CART",
+                "Added product ID: " + productId
+        );
+
 
         return ResponseUtils.success(
                 new CartDataRs("Added to cart",
@@ -119,11 +127,19 @@ public class CartServiceImpl implements CartService {
         cart.setQuantity(quantity);
         cartRepo.save(cart);
 
+        // USER ACTIVITY LOG
+        userActivityService.log(
+                userId,
+                "UPDATE_CART",
+                "Updated quantity for cart ID: " + cartId + " to " + quantity
+        );
+
         return ResponseUtils.success(
                 new CartDataRs("Quantity updated",
                         CartMapper.mapToCartRs(cart, fileService))
         );
     }
+
 
     // ==========================================================
     // REMOVE CART ITEM
@@ -143,8 +159,16 @@ public class CartServiceImpl implements CartService {
 
         cartRepo.delete(cart);
 
+        // USER ACTIVITY LOG
+        userActivityService.log(
+                userId,
+                "REMOVE_FROM_CART",
+                "Removed cart ID: " + cartId
+        );
+
         return ResponseUtils.success("Removed from cart");
     }
+
 
     // ==========================================================
     // LIST USER CART
@@ -154,82 +178,13 @@ public class CartServiceImpl implements CartService {
 
         Long userId = AuthUtils.findLoggedInUser().getDocId();
 
-        List<CartBO> cartList = cartRepo.findAllByUserAddToCart_Id(userId);
+        // Only show ACTIVE cart items   FIXED
+        List<CartBO> cartList =
+                cartRepo.findAllByUserAddToCart_IdAndEnabled(userId, true);
 
         return ResponseUtils.success(
                 new CartDataRsList("Cart loaded",
                         CartMapper.mapToCartRsList(cartList, fileService))
         );
     }
-
-//    // ==========================================================
-//// PLACE ORDER
-//// ==========================================================
-//    @Override
-//    @Transactional
-//    public BaseRs placeOrder() throws Exception {
-//
-//        Long userId = AuthUtils.findLoggedInUser().getDocId();
-//
-//        // ---- Fetch cart of current user ----
-//        List<CartBO> cartList = cartRepo.findAllByUserAddToCart_Id(userId);
-//
-//        if (cartList.isEmpty())
-//            return ResponseUtils.failure("EMPTY_CART", "Your cart is empty");
-//
-//        // ---- Compute total amount ----
-//        long totalAmount = cartList.stream()
-//                .mapToLong(c -> c.getPrice() * c.getQuantity())
-//                .sum();
-//
-//        // ---- Fetch shipping address ----
-//        AddressBO address = addressRepo.findByUserid(userId)
-//                .stream()
-//                .findFirst()
-//                .orElseThrow(() -> new RuntimeException("No shipping address found for user"));
-//
-//        UserBO user = userRepo.findById(userId)
-//                .orElseThrow(() -> new RuntimeException("User not found"));
-//
-//        // ---- Create Order ----
-//        OrderBO order = new OrderBO();
-//        order.setUser(user);
-//        order.setShippingAddress(address);    // <---- THIS FIXES address_id null
-//        order.setOrderTime(LocalDateTime.now());
-//        order.setOrderStatus("PLACED");
-//        order.setPaymentMethod("CASH_ON_DELIVERY");
-//        order.setTotalAmount(totalAmount);
-//        order.setInvoiceno("INV-" + System.currentTimeMillis());
-//
-//        // ---- Attach CartBO items correctly ----
-//        for (CartBO cart : cartList) {
-//
-//            cart.setUserAddToCart(null);      // remove user link
-//
-//            cartRepo.save(cart);              // <---- IMPORTANT
-//            // avoids: TransientObjectException
-//            // makes CartBO "persistent" again
-//
-//            order.getCartItems().add(cart);   // add to order
-//        }
-//
-//        // ---- Save Order ----
-//        OrderBO savedOrder = orderRepo.save(order);
-//
-//        // ---- Generate Invoice ----
-//        invoiceService.generateInvoice(savedOrder.getId());
-//
-//        // ---- Clear user's cart ----
-//        // IMPORTANT: do NOT delete carts now because they belong to order
-//        // only delete "user_addcart_id" relation
-//        // already removed above, so nothing more required
-//
-//        return ResponseUtils.success(
-//                new BaseDataRs("Order placed successfully!", new OrderIdRs(savedOrder.getId()))
-//        );
-//
-//
-//    }
-
-
 }
