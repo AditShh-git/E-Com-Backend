@@ -1,37 +1,23 @@
 package com.one.aim.controller;
 
-import com.one.aim.bo.FileBO;
-import com.one.aim.bo.InvoiceBO;
 import com.one.aim.mapper.InvoiceMapper;
 import com.one.aim.repo.FileRepo;
 import com.one.aim.repo.InvoiceRepo;
 import com.one.aim.rq.UpdateRq;
 import com.one.aim.rq.UserFilterRequest;
 import com.one.aim.rs.InvoiceRs;
-import com.one.aim.service.AuthService;
 import com.one.aim.service.InvoiceService;
+import com.one.aim.service.UserService;
 import com.one.utils.AuthUtils;
 import com.one.vm.core.BaseRs;
-import com.one.vm.utils.ResponseUtils;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import com.one.aim.rq.LoginRq;
 import com.one.aim.rq.UserRq;
-import com.one.aim.service.UserService;
-import com.one.utils.Utils;
-
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
@@ -83,10 +69,8 @@ public class UserController {
         return ResponseEntity.ok(userService.retrieveAllUser());
     }
 
-
-
     // ===========================================================
-    // DELETE USER (ADMIN ONLY)
+    // DELETE USER BY ID (ADMIN ONLY)
     // ===========================================================
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteUser(@PathVariable String id) throws Exception {
@@ -95,7 +79,7 @@ public class UserController {
     }
 
     // ===========================================================
-    // UPDATE USER PROFILE
+    // UPDATE USER PROFILE  (USER ONLY)
     // ===========================================================
     @PreAuthorize("hasAuthority('USER')")
     @PutMapping(value = "/profile/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -125,22 +109,31 @@ public class UserController {
         return ResponseEntity.ok(userService.updateUserProfile(loggedEmail, rq));
     }
 
-// =====================================================================
-//  USER → Get invoices for logged-in user
-// =====================================================================
-@GetMapping("/invoice/all")
-public List<InvoiceRs> getUserInvoices() {
+    // =====================================================================
+    //  USER → Get invoices for logged-in user
+    // =====================================================================
+    @GetMapping("/invoice/all")
+    public List<InvoiceRs> getUserInvoices() {
 
-    String role = AuthUtils.findLoggedInUser().getRoll();
-    Long userId = AuthUtils.findLoggedInUser().getDocId();
+        String role = AuthUtils.findLoggedInUser().getRoll();
+        Long userId = AuthUtils.findLoggedInUser().getDocId();
 
-    if (!"USER".equalsIgnoreCase(role)) {
-        throw new RuntimeException("Not allowed.");
+        if (!"USER".equalsIgnoreCase(role)) {
+            throw new RuntimeException("Not allowed.");
+        }
+
+        return invoiceService.getInvoicesForUser(userId)
+                .stream()
+                .map(InvoiceMapper::toDto)
+                .toList();
     }
 
-    return invoiceService.getInvoicesForUser(userId)
-            .stream()
-            .map(InvoiceMapper::toDto)
-            .toList();
-}
+    // =====================================================================
+    // DELETE MY ACCOUNT (USER)
+    // =====================================================================
+    @DeleteMapping("/delete/me")
+    public ResponseEntity<?> deleteMyAccount() throws Exception {
+        return new ResponseEntity<>(userService.deleteMyAccount(), HttpStatus.OK);
+    }
+
 }

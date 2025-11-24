@@ -1,26 +1,19 @@
 package com.one.aim.rs;
 
-import java.io.Serializable;
-import java.util.Collections;
-import java.util.List;
+import lombok.*;
 
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-
-@Getter
-@Setter
+@Data
+@AllArgsConstructor
 @NoArgsConstructor
-public class WishlistRs implements Serializable {
+@Builder
+public class WishlistRs {
 
-	private static final long serialVersionUID = 1L;
-
-    private String productId;
-    private String name;
-    private String description;
-    private double price;
-    private String category;
-    private Long imageId;
-
+    private Long productId;
+    private String productName;
+    private Double price;
+    private boolean inStock;
+    private boolean lowStock;
+    private String productImageUrl;   // First image
+    private String categoryName;
 }
 

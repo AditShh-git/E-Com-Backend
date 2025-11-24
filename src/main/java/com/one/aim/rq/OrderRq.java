@@ -1,9 +1,6 @@
 package com.one.aim.rq;
 
-import java.util.Map;
-
 import com.one.vm.core.BaseVM;
-
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -15,9 +12,10 @@ public class OrderRq extends BaseVM {
 
     private static final long serialVersionUID = 1L;
 
-    private String paymentMethod;
+    // If user selects an existing saved address
+    private Long addressId;
 
-    // Shipping address
+    // If user enters a new address manually during checkout
     private String fullName;
     private String street;
     private String city;
@@ -25,4 +23,10 @@ public class OrderRq extends BaseVM {
     private String zip;
     private String country;
     private String phone;
+
+    // COD / ONLINE
+    private String paymentMethod;
+
+    // Payment amount
+    private Long amount;
 }

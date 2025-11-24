@@ -8,8 +8,6 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Entity
@@ -42,96 +40,74 @@ public class UserBO {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    @Column(length = 15,unique = true)
+    @Column(length = 15, unique = true)
     private String phoneNo;
 
     @Column(nullable = false)
     private String password;
 
-    private String role; // USER, ADMIN, VENDOR, etc.
+    private String role;   // USER / SELLER / ADMIN
 
-    // ===========================================================
+    // =====================================================
     // EMAIL VERIFICATION
-    // ===========================================================
-    @Column(nullable = false)
+    // =====================================================
     @Builder.Default
     private Boolean emailVerified = false;
 
-    @Column(name = "pending_email")
     private String pendingEmail;
-
-    @Column(length = 255)
     private String verificationToken;
-
     private LocalDateTime verificationTokenExpiry;
 
-    // ===========================================================
+    // =====================================================
     // PASSWORD RESET
-    // ===========================================================
-    @Column(length = 255)
+    // =====================================================
     private String resetToken;
-
     private LocalDateTime resetTokenExpiry;
 
-    // ===========================================================
-    // ACCOUNT STATUS / SOFT DELETE
-    // ===========================================================
-    @Column(nullable = false)
+    // =====================================================
+    // ACCOUNT STATUS & SOFT DELETE
+    // =====================================================
     @Builder.Default
-    private Boolean active = false;
+    private Boolean active = true;
 
-    @Column(nullable = false)
     @Builder.Default
-    private Boolean login = false; //  Add this for login tracking
+    private Boolean deleted = false;
+
+    @Builder.Default
+    private Boolean loggedIn = false;
 
     public boolean isActive() {
-        return Boolean.TRUE.equals(active);
+        return Boolean.TRUE.equals(active) && Boolean.FALSE.equals(deleted);
     }
 
-    // ===========================================================
+    // =====================================================
     // AUDIT FIELDS
-    // ===========================================================
-    @Column(name = "created_at", nullable = false, updatable = false)
+    // =====================================================
     @CreationTimestamp
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at", nullable = false)
     @UpdateTimestamp
     private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
 
-    // ===========================================================
+    // =====================================================
     // PROFILE IMAGE
-    // ===========================================================
-    @Column(name = "image")
+    // =====================================================
     private Long imageFileId;
 
-
-    // REMOVED: Old User → Cart mapping `mappedBy = "userCart"`
-// Reason: CartBO no longer has a field named `userCart`.
-// Keeping it caused Hibernate startup failure.
-// Fix: We now use only `userAddToCart` as the correct relation.
-
-    // Add cart by ADMIN,SELLER,VENDOR
-//	@OneToMany(mappedBy = "userCart", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-//	private List<CartBO> cartItems = new ArrayList<>();
-
-    // ============================================
-    // USER ADD-TO-CART (One User → Many Carts)
-    // ============================================
+    // =====================================================
+    // USER → CART
+    // =====================================================
     @OneToMany(mappedBy = "userAddToCart", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CartBO> addtoCart = new ArrayList<>();
 
+    // =====================================================
+    // USER → WISHLIST
+    // =====================================================
     @ManyToMany
     @JoinTable(
             name = "user_wishlist",
@@ -139,11 +115,4 @@ public class UserBO {
             inverseJoinColumns = @JoinColumn(name = "product_id")
     )
     private List<ProductBO> wishlistProducts = new ArrayList<>();
-
-
-
-//	@Lob
-//	@Column(name = "image", columnDefinition = "LONGBLOB")
-//	private byte[] image;
-
 }

@@ -1,10 +1,6 @@
 package com.one.aim.bo;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -35,4 +31,8 @@ public class AddressBO {
     private String phone;
 
     private Long userid;
+
+    @Column(name = "is_default")
+    private Boolean isDefault = false;
+
 }

@@ -28,7 +28,6 @@ import java.util.*;
 @Slf4j
 public class OrderServiceImpl implements OrderService {
 
-//    private final InvoiceGenerator invoiceGenerator;
     private final OrderRepo orderRepo;
     private final CartRepo cartRepo;
     private final UserRepo userRepo;
@@ -37,7 +36,7 @@ public class OrderServiceImpl implements OrderService {
     private final InvoiceService invoiceService;
     private final InvoiceRepo invoiceRepo;
     private final FileService fileService;
-    private final UserActivityService  userActivityService;
+    private final UserActivityService userActivityService;
     private final ProductRepo productRepo;
 
     public BaseRs getOrders() {
@@ -53,12 +52,10 @@ public class OrderServiceImpl implements OrderService {
     public BaseRs placeOrder(OrderRq rq) throws Exception {
 
         Long userId = AuthUtils.findLoggedInUser().getDocId();
-        if (userId == null) {
-            throw new RuntimeException("User not authenticated");
-        }
+        if (userId == null) throw new RuntimeException("User not authenticated");
 
         // ------------------------------------------------------------
-        // LOAD CART ITEMS (only enabled = true)
+        // LOAD CART ITEMS (only enabled=true)
         // ------------------------------------------------------------
         List<CartBO> cartItems = cartRepo.findAllByUserAddToCart_IdAndEnabled(userId, true);
 
@@ -69,51 +66,64 @@ public class OrderServiceImpl implements OrderService {
         long totalAmount = 0L;
 
         // ------------------------------------------------------------
-        // VALIDATE STOCK + UPDATE STOCK + CALCULATE TOTAL
+        // VALIDATE STOCK + UPDATE STOCK
         // ------------------------------------------------------------
         for (CartBO cart : cartItems) {
 
             ProductBO product = cart.getProduct();
-            if (product == null) {
-                throw new RuntimeException("Product missing for cart id: " + cart.getId());
-            }
+            if (product == null)
+                throw new RuntimeException("Product missing in cart");
 
             int available = product.getStock() == null ? 0 : product.getStock();
             int qty = cart.getQuantity() <= 0 ? 1 : cart.getQuantity();
 
-            if (available < qty) {
+            if (available < qty)
                 throw new RuntimeException("Insufficient stock for: " + product.getName());
-            }
 
             // update stock
             product.setStock(available - qty);
             product.updateLowStock();
             productRepo.save(product);
 
-            // always use latest product price
-            long productPrice = product.getPrice() == null ? 0L : product.getPrice().longValue();
-
-            // update snapshot into cart
-            cart.setPrice(productPrice);
+            // use latest product price
+            long price = product.getPrice() == null ? 0L : product.getPrice().longValue();
+            cart.setPrice(price);
             cartRepo.save(cart);
 
-            // accumulate total
-            totalAmount += productPrice * qty;
+            totalAmount += price * qty;
         }
 
         // ------------------------------------------------------------
-        // SAVE SHIPPING ADDRESS
+        // SELECT SHIPPING ADDRESS
         // ------------------------------------------------------------
-        AddressBO address = new AddressBO();
-        address.setFullName(rq.getFullName());
-        address.setStreet(rq.getStreet());
-        address.setCity(rq.getCity());
-        address.setState(rq.getState());
-        address.setZip(rq.getZip());
-        address.setCountry(rq.getCountry());
-        address.setPhone(rq.getPhone());
-        address.setUserid(userId);
-        addressRepo.save(address);
+        AddressBO shippingAddress;
+
+        if (rq.getAddressId() != null) {
+            shippingAddress = addressRepo.findById(rq.getAddressId())
+                    .orElseThrow(() -> new RuntimeException("Invalid addressId"));
+
+            if (!shippingAddress.getUserid().equals(userId)) {
+                throw new RuntimeException("Address does not belong to user");
+            }
+        } else if (rq.getFullName() != null) {
+
+            shippingAddress = new AddressBO();
+            shippingAddress.setFullName(rq.getFullName());
+            shippingAddress.setStreet(rq.getStreet());
+            shippingAddress.setCity(rq.getCity());
+            shippingAddress.setState(rq.getState());
+            shippingAddress.setZip(rq.getZip());
+            shippingAddress.setCountry(rq.getCountry());
+            shippingAddress.setPhone(rq.getPhone());
+            shippingAddress.setUserid(userId);
+            shippingAddress.setIsDefault(false);
+            addressRepo.save(shippingAddress);
+
+        } else {
+            shippingAddress = addressRepo
+                    .findFirstByUseridAndIsDefault(userId, true)
+                    .orElseThrow(() -> new RuntimeException("No default address found"));
+        }
 
         // ------------------------------------------------------------
         // CREATE ORDER
@@ -125,35 +135,26 @@ public class OrderServiceImpl implements OrderService {
         order.setOrderStatus("INITIAL");
         order.setOrderTime(LocalDateTime.now());
         order.setTotalAmount(totalAmount);
-        order.setShippingAddress(address);
-        order.setCartItems(cartItems);     // OLD M2M mapping kept for backward compatibility
+        order.setShippingAddress(shippingAddress);
+        order.setCartItems(cartItems);
 
-        // Normalize payment method
+        // payment method
         String pm = rq.getPaymentMethod() == null ? "" : rq.getPaymentMethod().trim().toUpperCase();
         order.setPaymentMethod(pm);
 
-        // ------------------------------------------------------------
-        // PAYMENT LOGIC (COD vs ONLINE)
-        // ------------------------------------------------------------
-        if ("COD".equals(pm)) {
-            order.setPaymentStatus("COD_PENDING");
-        } else {
-            order.setPaymentStatus("CREATED");
-        }
+        order.setPaymentStatus("COD".equals(pm) ? "COD_PENDING" : "CREATED");
 
-        // ------------------------------------------------------------
-        // INVOICE NO
-        // ------------------------------------------------------------
-        String invoiceNo = "AIM" +
-                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+        String invoiceNo = "AIM" + LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+
         order.setInvoiceno(invoiceNo);
 
-        // First save (before OrderItems)
+        // save order first
         orderRepo.save(order);
 
-        // ============================================================
-        // NEW: CREATE OrderItemBO entries (Safe migration)
-        // ============================================================
+        // ------------------------------------------------------------
+        // ORDER ITEMS
+        // ------------------------------------------------------------
         List<OrderItemBO> orderItemList = new ArrayList<>();
 
         for (CartBO cart : cartItems) {
@@ -175,33 +176,26 @@ public class OrderServiceImpl implements OrderService {
         }
 
         order.setOrderItems(orderItemList);
-
-        // Second save: persists OrderItemBO
         orderRepo.save(order);
-
 
         // ------------------------------------------------------------
         // DISABLE CART ITEMS
         // ------------------------------------------------------------
-        for (CartBO cart : cartItems) {
-            cart.setEnabled(false);
-        }
+        cartItems.forEach(c -> c.setEnabled(false));
         cartRepo.saveAll(cartItems);
 
         // ------------------------------------------------------------
-        // GENERATE AND STORE INVOICE PDF (still uses old cart logic)
+        // INVOICE PDF
         // ------------------------------------------------------------
         String html = invoiceService.downloadInvoiceHtml(order.getOrderId());
-
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         HtmlConverter.convertToPdf(html, out);
-        byte[] pdfBytes = out.toByteArray();
 
-        FileBO pdfFile = fileService.uploadBytes(pdfBytes, invoiceNo + ".pdf");
+        FileBO pdfFile = fileService.uploadBytes(out.toByteArray(), invoiceNo + ".pdf");
 
         InvoiceBO invoice = InvoiceBO.builder()
                 .order(order)
-                .user(order.getUser())
+                .user(user)
                 .invoiceNumber(invoiceNo)
                 .invoiceFileId(pdfFile.getId())
                 .build();
@@ -209,30 +203,26 @@ public class OrderServiceImpl implements OrderService {
         invoiceRepo.save(invoice);
 
         // ------------------------------------------------------------
-        // RESPONSE
+        // USER ACTIVITY LOG
         // ------------------------------------------------------------
-        Map<String, Object> data = new HashMap<>();
-        data.put("orderId", order.getOrderId());
-        data.put("invoiceNo", invoiceNo);
-        data.put("totalAmount", totalAmount);
-        data.put("paymentMethod", pm);
-        data.put("paymentStatus", order.getPaymentStatus());
-
         userActivityService.log(
                 userId,
                 "ORDER_PLACED",
                 "Order placed with ID: " + order.getOrderId()
         );
 
+        // ------------------------------------------------------------
+        // RESPONSE
+        // ------------------------------------------------------------
+        Map<String, Object> response = new HashMap<>();
+        response.put("orderId", order.getOrderId());
+        response.put("invoiceNo", invoiceNo);
+        response.put("totalAmount", totalAmount);
+        response.put("paymentMethod", pm);
+        response.put("paymentStatus", order.getPaymentStatus());
 
-        return ResponseUtils.success(data);
+        return ResponseUtils.success(response);
     }
-
-
-
-    // ============================================================
-    // OTHER METHODS (Empty for now — you will fill them later)
-    // ============================================================
 
     @Override
     public BaseRs retrieveOrder(Long id) throws Exception {
@@ -246,16 +236,16 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public void updateDeliveryStatus(String orderId, String status) {
-        // no-op for now
+        // no-op
     }
 
     @Override
     public BaseRs retrieveOrdersUser() throws Exception {
         Long userId = AuthUtils.getLoggedUserId();
 
-        List<OrderBO> orders = orderRepo.findAllByUserIdOrderByOrderTimeDesc(userId);
+        List<OrderBO> orders =
+                orderRepo.findAllByUserIdOrderByOrderTimeDesc(userId);
 
-        // Activity Log
         userActivityService.log(
                 userId,
                 "VIEW_ORDERS",
@@ -267,8 +257,6 @@ public class OrderServiceImpl implements OrderService {
         );
     }
 
-
-
     @Override
     public BaseRs retrieveAllOrders() throws Exception {
         return ResponseUtils.success("Not implemented yet");
@@ -279,83 +267,54 @@ public class OrderServiceImpl implements OrderService {
     public BaseRs cancelOrder(String orderId) throws Exception {
 
         Long userId = AuthUtils.findLoggedInUser().getDocId();
-        if (userId == null) {
+        if (userId == null)
             throw new RuntimeException("User not authenticated");
-        }
 
-        // Load order
         OrderBO order = orderRepo.findByOrderId(orderId)
                 .orElseThrow(() -> new RuntimeException("Order not found"));
 
-        // Only owner can cancel
-        if (order.getUser() == null || !order.getUser().getId().equals(userId)) {
-            return ResponseUtils.failure("NOT_ALLOWED", "You cannot cancel this order");
+        if (!order.getUser().getId().equals(userId)) {
+            return ResponseUtils.failure("NOT_ALLOWED", "You cannot cancel this order.");
         }
 
-        // Block cancellation after processing
-        String status = order.getOrderStatus() == null ? "" : order.getOrderStatus().toUpperCase();
-        if (!status.equals("INITIAL")) {
+        if (!"INITIAL".equalsIgnoreCase(order.getOrderStatus())) {
             return ResponseUtils.failure("CANNOT_CANCEL", "Order already processed");
         }
 
-        // ------------------------------------------------------------
-        // 1. RESTORE STOCK + ENABLE CART ITEMS
-        // ------------------------------------------------------------
-        List<CartBO> carts = order.getCartItems();
-        if (carts != null && !carts.isEmpty()) {
-            for (CartBO cart : carts) {
+        // restore stock
+        for (CartBO cart : order.getCartItems()) {
 
-                cart.setEnabled(true);
+            cart.setEnabled(true);
 
-                ProductBO product = cart.getProduct();
-                if (product != null) {
-                    int current = product.getStock() == null ? 0 : product.getStock();
-                    int qty = cart.getQuantity() <= 0 ? 1 : cart.getQuantity();
-                    product.setStock(current + qty);
-                    product.updateLowStock();
-                    productRepo.save(product);
-                }
+            ProductBO product = cart.getProduct();
+            if (product != null) {
+                int current = product.getStock() == null ? 0 : product.getStock();
+                int qty = cart.getQuantity() <= 0 ? 1 : cart.getQuantity();
+                product.setStock(current + qty);
+                product.updateLowStock();
+                productRepo.save(product);
             }
-            cartRepo.saveAll(carts);
         }
+        cartRepo.saveAll(order.getCartItems());
 
-        // ------------------------------------------------------------
-        // 2. MARK ORDER AS CANCELLED
-        // ------------------------------------------------------------
         order.setOrderStatus("CANCELLED");
         order.setPaymentStatus("CANCELLED");
         orderRepo.save(order);
 
-        // ------------------------------------------------------------
-        // USER ACTIVITY LOG — ORDER CANCELLED
-        // ------------------------------------------------------------
         userActivityService.log(
                 userId,
                 "ORDER_CANCELLED",
                 "Cancelled order ID: " + order.getOrderId()
         );
 
-        // ------------------------------------------------------------
-        // 3. RESPONSE
-        // ------------------------------------------------------------
-        Map<String, Object> data = new HashMap<>();
-        data.put("orderId", order.getOrderId());
-        data.put("orderStatus", order.getOrderStatus());
-        data.put("paymentStatus", order.getPaymentStatus());
+        Map<String, Object> response = new HashMap<>();
+        response.put("orderId", order.getOrderId());
+        response.put("orderStatus", order.getOrderStatus());
+        response.put("paymentStatus", order.getPaymentStatus());
 
-        return ResponseUtils.success(data);
+        return ResponseUtils.success(response);
     }
 
-
-
-
-    /**
-     * Extract seller for this order.
-     * We don’t store sellerId in CartBO anymore.
-     * Seller now comes from ProductBO (product → seller).
-     * So we pick the seller of the first cart item.
-     * Works because one order = one seller in current design.
-     */
     private SellerBO findSellerFromOrder(OrderBO order) {
         if (order.getCartItems() == null || order.getCartItems().isEmpty())
             return null;
@@ -363,11 +322,6 @@ public class OrderServiceImpl implements OrderService {
         CartBO cart = order.getCartItems().get(0);
         ProductBO product = cart.getProduct();
 
-        if (product == null || product.getSeller() == null)
-            return null;
-
-        return product.getSeller();
+        return (product == null) ? null : product.getSeller();
     }
-
-
 }

@@ -1,8 +1,10 @@
 package com.one.aim.controller;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,37 +17,35 @@ import com.one.aim.service.WishlistService;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
-@RequestMapping(value = "/api")
+@RequestMapping("/api/wishlist")
+@RequiredArgsConstructor
 @Slf4j
-public class WishListController {
+public class WishlistController {
 
-	@Autowired
-	private WishlistService wishlistService;
+    private final WishlistService wishlistService;
 
-	@PostMapping("/wishlist/save/{cartId}")
-	public ResponseEntity<?> saveWishList(@PathVariable("cartId") String cartId) throws Exception {
+    @PostMapping("/{productId}")
+    public ResponseEntity<?> add(@PathVariable Long productId) throws Exception {
+        return ResponseEntity.ok(wishlistService.add(productId));
+    }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing RESTfulService [POST /user]");
-		}
-		return new ResponseEntity<>(wishlistService.addToWishlist(cartId), HttpStatus.OK);
-	}
+    @GetMapping
+    public ResponseEntity<?> getAll() throws Exception {
+        return ResponseEntity.ok(wishlistService.getAll());
+    }
 
-	@GetMapping("/wishlist")
-	public ResponseEntity<?> retrieveWishList() throws Exception {
+    @DeleteMapping("/{productId}")
+    public ResponseEntity<?> remove(@PathVariable Long productId) throws Exception {
+        return ResponseEntity.ok(wishlistService.remove(productId));
+    }
 
-		if (log.isDebugEnabled()) {
-			log.debug("Executing RESTfulService [POST /user]");
-		}
-		return new ResponseEntity<>(wishlistService.getUserWishlist(), HttpStatus.OK);
-	}
+    @PostMapping("/move-to-cart/{productId}")
+    public ResponseEntity<?> moveToCart(@PathVariable Long productId) throws Exception {
+        return ResponseEntity.ok(wishlistService.moveToCart(productId));
+    }
 
-	@DeleteMapping("/wishlist/{wishlistId}")
-	public ResponseEntity<?> deleteWishlist(@PathVariable("wishlistId") String wishlistId) throws Exception {
-
-		if (log.isDebugEnabled()) {
-			log.debug("Executing RESTfulService [POST /user]");
-		}
-		return new ResponseEntity<>(wishlistService.deleteUserWishlist(wishlistId), HttpStatus.OK);
-	}
+    @GetMapping("/count")
+    public ResponseEntity<?> count() throws Exception {
+        return ResponseEntity.ok(wishlistService.count());
+    }
 }

@@ -260,7 +260,7 @@ public class AuthServiceImpl implements AuthService {
 
         if ("USER".equalsIgnoreCase(role)) {
             userRepo.findById(id).ifPresent(u -> {
-                u.setLogin(false);
+                u.setLoggedIn(false);
                 userRepo.save(u);
             });
         }
