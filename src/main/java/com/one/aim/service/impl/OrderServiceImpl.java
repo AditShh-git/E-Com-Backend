@@ -1,8 +1,6 @@
 package com.one.aim.service.impl;
 
 import com.itextpdf.html2pdf.HtmlConverter;
-import com.itextpdf.kernel.pdf.PdfDocument;
-import com.itextpdf.kernel.pdf.PdfWriter;
 import com.one.aim.bo.*;
 import com.one.aim.controller.OrderNotificationController;
 import com.one.aim.mapper.OrderMapper;
@@ -13,29 +11,24 @@ import com.one.aim.service.FileService;
 import com.one.aim.service.InvoiceService;
 import com.one.aim.service.OrderService;
 import com.one.utils.AuthUtils;
-import com.one.utils.InvoiceGenerator;
 import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class OrderServiceImpl implements OrderService {
 
-    private final InvoiceGenerator invoiceGenerator;
+//    private final InvoiceGenerator invoiceGenerator;
     private final OrderRepo orderRepo;
     private final CartRepo cartRepo;
     private final UserRepo userRepo;
@@ -44,7 +37,7 @@ public class OrderServiceImpl implements OrderService {
     private final InvoiceService invoiceService;
     private final InvoiceRepo invoiceRepo;
     private final FileService fileService;
-    private final SellerRepo sellerRepo;
+    private final UserActivityService  userActivityService;
     private final ProductRepo productRepo;
 
     public BaseRs getOrders() {
@@ -62,108 +55,156 @@ public class OrderServiceImpl implements OrderService {
         Long userId = AuthUtils.findLoggedInUser().getDocId();
         if (userId == null) throw new RuntimeException("User not authenticated");
 
-        if (rq.getTotalCarts() == null || rq.getTotalCarts().isEmpty()) {
-            throw new RuntimeException("Cart is empty");
+        // ------------------------------------------------------------
+        // LOAD CART
+        // ------------------------------------------------------------
+        List<CartBO> cartItems = cartRepo.findAllByUserAddToCart_IdAndEnabled(userId, true);
+
+        if (cartItems == null || cartItems.isEmpty()) {
+            return ResponseUtils.failure("CART_EMPTY", "Your cart is empty.");
         }
 
-        List<CartBO> cartItems = new ArrayList<>();
-        long totalAmount = 0;
+        long totalAmount = 0L;
 
         // ------------------------------------------------------------
-        // BUILD CART LIST + VALIDATE STOCK
+        // VALIDATE + UPDATE STOCK
         // ------------------------------------------------------------
-        for (Map.Entry<String, Integer> entry : rq.getTotalCarts().entrySet()) {
+        for (CartBO cart : cartItems) {
 
-            Long cartId = Long.valueOf(entry.getKey());
-            int qtyRequested = entry.getValue();
-
-            CartBO cartBO = cartRepo.findById(cartId)
-                    .orElseThrow(() -> new RuntimeException("Invalid cart ID: " + cartId));
-
-            ProductBO product = cartBO.getProduct();
-            if (product == null) throw new RuntimeException("Product missing for cart ID: " + cartId);
+            ProductBO product = cart.getProduct();
+            if (product == null) throw new RuntimeException("Missing product in cart");
 
             int available = product.getStock() == null ? 0 : product.getStock();
-            int qtyToUse = qtyRequested > 0 ? qtyRequested : cartBO.getQuantity();
+            int qty = Math.max(cart.getQuantity(), 1);
 
-            if (available < qtyToUse) {
-                throw new RuntimeException("Insufficient stock for: " + product.getName());
-            }
+            if (available < qty)
+                throw new RuntimeException("Insufficient stock: " + product.getName());
 
-            // Reduce stock
-            product.setStock(available - qtyToUse);
+            // update stock
+            product.setStock(available - qty);
             product.updateLowStock();
             productRepo.save(product);
 
-            // Freeze quantity for invoice
-            cartBO.setQuantity(qtyToUse);
+            long productPrice =
+                    product.getPrice() == null ? 0L : product.getPrice().longValue();
 
-            totalAmount += cartBO.getPrice() * qtyToUse;
-            cartItems.add(cartBO);
+
+            cart.setPrice(productPrice);
+            cartRepo.save(cart);
+
+            totalAmount += productPrice * qty;
         }
 
         // ------------------------------------------------------------
-        // SAVE SHIPPING ADDRESS
+        // SELECT SHIPPING ADDRESS
         // ------------------------------------------------------------
-        AddressBO address = new AddressBO();
-        address.setFullName(rq.getFullName());
-        address.setStreet(rq.getStreet());
-        address.setCity(rq.getCity());
-        address.setState(rq.getState());
-        address.setZip(rq.getZip());
-        address.setCountry(rq.getCountry());
-        address.setPhone(rq.getPhone());
-        address.setUserid(userId);
-        addressRepo.save(address);
+        AddressBO shippingAddress;
 
-        // ------------------------------------------------------------
-        // DISABLE ORDERED CART ITEMS
-        // ------------------------------------------------------------
-        for (CartBO item : cartItems) item.setEnabled(false);
-        cartRepo.saveAll(cartItems);
+        // CASE 1 → User selected an existing saved address
+        if (rq.getAddressId() != null) {
 
-        // Remove from user's Add-To-Cart
-        UserBO user = userRepo.findById(userId).orElseThrow();
-        user.getAddtoCart().removeIf(c -> cartItems.stream().anyMatch(o -> o.getId().equals(c.getId())));
-        userRepo.save(user);
+            shippingAddress = addressRepo.findById(rq.getAddressId())
+                    .orElseThrow(() -> new RuntimeException("Invalid addressId"));
+
+            // Ensure this address belongs to logged-in user
+            if (!shippingAddress.getUserid().equals(userId)) {
+                throw new RuntimeException("Address does not belong to logged user");
+            }
+
+        }
+        // CASE 2 → User typed a NEW address in checkout
+        else if (rq.getFullName() != null) {
+
+            shippingAddress = new AddressBO();
+            shippingAddress.setFullName(rq.getFullName());
+            shippingAddress.setStreet(rq.getStreet());
+            shippingAddress.setCity(rq.getCity());
+            shippingAddress.setState(rq.getState());
+            shippingAddress.setZip(rq.getZip());
+            shippingAddress.setCountry(rq.getCountry());
+            shippingAddress.setPhone(rq.getPhone());
+            shippingAddress.setUserid(userId);
+            shippingAddress.setIsDefault(false);
+            addressRepo.save(shippingAddress);
+
+        }
+        // CASE 3 → No address provided → use DEFAULT
+        else {
+
+            shippingAddress = addressRepo
+                    .findFirstByUseridAndIsDefault(userId, true)
+                    .orElseThrow(() -> new RuntimeException("No default address found"));
+
+        }
 
         // ------------------------------------------------------------
         // CREATE ORDER
         // ------------------------------------------------------------
+        UserBO user = userRepo.findById(userId).orElseThrow();
+
         OrderBO order = new OrderBO();
         order.setUser(user);
         order.setOrderStatus("INITIAL");
-        order.setPaymentMethod(
-                rq.getPaymentMethod() == null ? "UNKNOWN" : rq.getPaymentMethod().toUpperCase()
-        );
         order.setOrderTime(LocalDateTime.now());
         order.setTotalAmount(totalAmount);
-        order.setShippingAddress(address);
+        order.setShippingAddress(shippingAddress);
         order.setCartItems(cartItems);
 
-        // Seller for order (first product seller)
-        SellerBO seller = findSellerFromOrder(order);
+        String pm = rq.getPaymentMethod() == null ? "" : rq.getPaymentMethod().toUpperCase();
+        order.setPaymentMethod(pm);
+
+        // COD vs ONLINE payment status
+        order.setPaymentStatus("COD".equals(pm) ? "COD_PENDING" : "CREATED");
 
         // Invoice number
-        String invoiceNo = "AIM" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+        String invoiceNo = "AIM" + LocalDateTime.now().format(
+                DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")
+        );
         order.setInvoiceno(invoiceNo);
 
         orderRepo.save(order);
 
         // ------------------------------------------------------------
-        // GENERATE AND STORE PDF
+        // CREATE ORDER ITEMS
         // ------------------------------------------------------------
-        String html = invoiceService.downloadInvoiceHtml(order.getId());
+        List<OrderItemBO> orderItemList = new ArrayList<>();
 
+        for (CartBO cart : cartItems) {
+
+            ProductBO product = cart.getProduct();
+
+            OrderItemBO item = OrderItemBO.builder()
+                    .order(order)
+                    .product(product)
+                    .sellerId(product.getSeller().getId())
+                    .productName(product.getName())
+                    .productCategory(product.getCategoryName())
+                    .unitPrice(cart.getPrice())
+                    .quantity(cart.getQuantity())
+                    .totalPrice(cart.getPrice() * cart.getQuantity())
+                    .build();
+
+            orderItemList.add(item);
+        }
+
+        order.setOrderItems(orderItemList);
+        orderRepo.save(order);
+
+        // ------------------------------------------------------------
+        // DISABLE CART ITEMS
+        // ------------------------------------------------------------
+        cartItems.forEach(c -> c.setEnabled(false));
+        cartRepo.saveAll(cartItems);
+
+        // ------------------------------------------------------------
+        // GENERATE PDF INVOICE
+        // ------------------------------------------------------------
+        String html = invoiceService.downloadInvoiceHtml(order.getOrderId());
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         HtmlConverter.convertToPdf(html, out);
-        byte[] pdfBytes = out.toByteArray();
 
-        FileBO pdfFile = fileService.uploadBytes(pdfBytes, invoiceNo + ".pdf");
+        FileBO pdfFile = fileService.uploadBytes(out.toByteArray(), invoiceNo + ".pdf");
 
-        // ------------------------------------------------------------
-        // SAVE INVOICE ENTRY
-        // ------------------------------------------------------------
         InvoiceBO invoice = InvoiceBO.builder()
                 .order(order)
                 .user(order.getUser())
@@ -171,18 +212,19 @@ public class OrderServiceImpl implements OrderService {
                 .invoiceFileId(pdfFile.getId())
                 .build();
 
-
         invoiceRepo.save(invoice);
 
         // ------------------------------------------------------------
         // RESPONSE
         // ------------------------------------------------------------
-        Map<String, Object> data = new HashMap<>();
-        data.put("orderId", order.getId());
-        data.put("invoiceNo", invoiceNo);
-        data.put("totalAmount", totalAmount);
+        Map<String, Object> response = new HashMap<>();
+        response.put("orderId", order.getOrderId());
+        response.put("invoiceNo", invoiceNo);
+        response.put("totalAmount", totalAmount);
+        response.put("paymentMethod", pm);
+        response.put("paymentStatus", order.getPaymentStatus());
 
-        return ResponseUtils.success(data);
+        return ResponseUtils.success(response);
     }
 
 
@@ -209,8 +251,23 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public BaseRs retrieveOrdersUser() throws Exception {
-        return ResponseUtils.success("Not implemented yet");
+        Long userId = AuthUtils.getLoggedUserId();
+
+        List<OrderBO> orders = orderRepo.findAllByUserIdOrderByOrderTimeDesc(userId);
+
+        // Activity Log
+        userActivityService.log(
+                userId,
+                "VIEW_ORDERS",
+                "Viewed order history"
+        );
+
+        return ResponseUtils.success(
+                OrderMapper.mapToOrderRsList(orders, fileService)
+        );
     }
+
+
 
     @Override
     public BaseRs retrieveAllOrders() throws Exception {
@@ -218,9 +275,78 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public BaseRs retrieveOrdersCancel(String orderId) throws Exception {
-        return ResponseUtils.success("Not implemented yet");
+    @Transactional
+    public BaseRs cancelOrder(String orderId) throws Exception {
+
+        Long userId = AuthUtils.findLoggedInUser().getDocId();
+        if (userId == null) {
+            throw new RuntimeException("User not authenticated");
+        }
+
+        // Load order
+        OrderBO order = orderRepo.findByOrderId(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        // Only owner can cancel
+        if (order.getUser() == null || !order.getUser().getId().equals(userId)) {
+            return ResponseUtils.failure("NOT_ALLOWED", "You cannot cancel this order");
+        }
+
+        // Block cancellation after processing
+        String status = order.getOrderStatus() == null ? "" : order.getOrderStatus().toUpperCase();
+        if (!status.equals("INITIAL")) {
+            return ResponseUtils.failure("CANNOT_CANCEL", "Order already processed");
+        }
+
+        // ------------------------------------------------------------
+        // 1. RESTORE STOCK + ENABLE CART ITEMS
+        // ------------------------------------------------------------
+        List<CartBO> carts = order.getCartItems();
+        if (carts != null && !carts.isEmpty()) {
+            for (CartBO cart : carts) {
+
+                cart.setEnabled(true);
+
+                ProductBO product = cart.getProduct();
+                if (product != null) {
+                    int current = product.getStock() == null ? 0 : product.getStock();
+                    int qty = cart.getQuantity() <= 0 ? 1 : cart.getQuantity();
+                    product.setStock(current + qty);
+                    product.updateLowStock();
+                    productRepo.save(product);
+                }
+            }
+            cartRepo.saveAll(carts);
+        }
+
+        // ------------------------------------------------------------
+        // 2. MARK ORDER AS CANCELLED
+        // ------------------------------------------------------------
+        order.setOrderStatus("CANCELLED");
+        order.setPaymentStatus("CANCELLED");
+        orderRepo.save(order);
+
+        // ------------------------------------------------------------
+        // USER ACTIVITY LOG — ORDER CANCELLED
+        // ------------------------------------------------------------
+        userActivityService.log(
+                userId,
+                "ORDER_CANCELLED",
+                "Cancelled order ID: " + order.getOrderId()
+        );
+
+        // ------------------------------------------------------------
+        // 3. RESPONSE
+        // ------------------------------------------------------------
+        Map<String, Object> data = new HashMap<>();
+        data.put("orderId", order.getOrderId());
+        data.put("orderStatus", order.getOrderStatus());
+        data.put("paymentStatus", order.getPaymentStatus());
+
+        return ResponseUtils.success(data);
     }
+
+
 
 
     /**

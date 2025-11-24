@@ -15,7 +15,12 @@ public interface AddressRepo extends JpaRepository<AddressBO, Long>{
 	 List<AddressBO> findByUserid(Long userid);
 
     Optional<AddressBO> findFirstByUserid(Long userid);
-	
+
+//    Optional<AddressBO> findByUseridAndIsDefault(Long userId, boolean isDefault);
+
+    Optional<AddressBO> findFirstByUseridAndIsDefault(Long userid, boolean isDefault);
+
+
 
 
 

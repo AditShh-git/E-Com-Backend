@@ -4,7 +4,11 @@ import java.util.List;
 import java.util.Optional;
 
 import com.one.aim.bo.ProductBO;
+import com.one.aim.bo.WishlistBO;
 import com.one.aim.repo.ProductRepo;
+import com.one.aim.repo.WishlistRepo;
+import com.one.aim.service.CartService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -24,83 +28,92 @@ import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.transaction.annotation.Transactional;
 
-@Slf4j
 @Service
+@RequiredArgsConstructor
 public class WishlistServiceImpl implements WishlistService {
 
-	@Autowired
-	CartRepo cartRepo;
-
-	@Autowired
-	UserRepo userRepo;
-
-    @Autowired
-    ProductRepo productRepo;
-
-//	@Autowired
-//	WishlistRepo wishlistRepo;
+    private final WishlistRepo wishlistRepo;
+    private final UserRepo userRepo;
+    private final ProductRepo productRepo;
+    private final CartService cartService;
 
     @Override
-    public BaseRs addToWishlist(String productId) throws Exception {
+    public BaseRs add(Long productId) {
 
-        Long userId = AuthUtils.findLoggedInUser().getDocId();
+        Long userId = AuthUtils.getLoggedUserId();
 
         UserBO user = userRepo.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        ProductBO product = productRepo.findById(Long.parseLong(productId))
-                .orElseThrow(() -> new RuntimeException("Invalid product ID"));
+        ProductBO product = productRepo.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
 
-        // Avoid duplicates
-        if (user.getWishlistProducts().contains(product)) {
+        // Already exists check
+        boolean exists = wishlistRepo.existsByUserIdAndProductId(userId, productId);
+        if (exists) {
             return ResponseUtils.failure("Already in wishlist");
         }
 
-        user.getWishlistProducts().add(product);
-        userRepo.save(user);
+        WishlistBO w = new WishlistBO();
+        w.setUser(user);
+        w.setProduct(product);
+        wishlistRepo.save(w);
 
-        return ResponseUtils.success(new WishlistDataRs("Added to wishlist"));
+        return ResponseUtils.success("Added to wishlist");
     }
 
-
     @Override
-    public BaseRs getUserWishlist() throws Exception {
+    @Transactional
+    public BaseRs remove(Long productId) {
 
-        Long userId = AuthUtils.findLoggedInUser().getDocId();
+        Long userId = AuthUtils.getLoggedUserId();
 
-        UserBO user = userRepo.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        int deleted = wishlistRepo.deleteByUserIdAndProductId(userId, productId);
 
-        List<ProductBO> products = user.getWishlistProducts();
-
-        List<WishlistRs> wishlistRsList = WishlistMapper.mapToWishlistRsList(products);
-
-        return ResponseUtils.success(new WishlistDataRsList(
-                MessageCodes.MC_RETRIEVED_SUCCESSFUL, wishlistRsList));
-    }
-
-
-    @Override
-    public BaseRs deleteUserWishlist(String productId) throws Exception {
-
-        Long userId = AuthUtils.findLoggedInUser().getDocId();
-
-        UserBO user = userRepo.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        ProductBO product = productRepo.findById(Long.parseLong(productId))
-                .orElseThrow(() -> new RuntimeException("Invalid product ID"));
-
-        boolean removed = user.getWishlistProducts().remove(product);
-
-        if (!removed) {
-            return ResponseUtils.failure("Item not found in wishlist");
+        if (deleted == 0) {
+            return ResponseUtils.failure("Not found in wishlist");
         }
 
-        userRepo.save(user);
-
-        return ResponseUtils.success(new WishlistDataRs(MessageCodes.MC_DELETED_SUCCESSFUL));
+        return ResponseUtils.success("Removed");
     }
 
+    @Override
+    public BaseRs getAll() {
+
+        Long userId = AuthUtils.getLoggedUserId();
+
+        List<WishlistBO> items = wishlistRepo.findByUserId(userId);
+
+        List<WishlistRs> rsList = items.stream()
+                .map(i -> WishlistMapper.mapToWishlistRs(i.getProduct()))
+                .toList();
+
+        return ResponseUtils.success(rsList);
+    }
+
+    @Override
+    @Transactional
+    public BaseRs moveToCart(Long productId) throws Exception {
+
+        Long userId = AuthUtils.getLoggedUserId();
+
+        // Remove from wishlist
+        wishlistRepo.deleteByUserIdAndProductId(userId, productId);
+
+        // Add to cart
+        cartService.addProductToCart(productId);
+
+        return ResponseUtils.success("Moved to cart");
+    }
+
+    @Override
+    public BaseRs count() {
+
+        Long userId = AuthUtils.getLoggedUserId();
+        int count = wishlistRepo.countByUserId(userId);
+
+        return ResponseUtils.success(count);
+    }
 }

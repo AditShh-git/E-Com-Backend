@@ -5,26 +5,14 @@ import java.util.List;
 import com.one.aim.rs.WishlistRs;
 import com.one.vm.core.BaseDataRs;
 
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
-@Getter
-@Setter
+@Data
+@AllArgsConstructor
 @NoArgsConstructor
-public class WishlistDataRsList extends BaseDataRs {
+@Builder
+public class WishlistDataRsList {
 
-	private static final long serialVersionUID = 1L;
-
-	private List<WishlistRs> wishlist;
-
-	public WishlistDataRsList(String message) {
-		super(message);
-	}
-
-	public WishlistDataRsList(String message, List<WishlistRs> wishlistRs) {
-		super(message);
-		this.wishlist = wishlistRs;
-	}
-
+    private String message;
+    private List<WishlistRs> wishlist;
 }

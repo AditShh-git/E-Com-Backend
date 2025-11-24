@@ -1,21 +1,40 @@
 package com.one.aim.repo;
 
-import com.one.aim.bo.OrderBO;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+import com.one.aim.bo.AddressBO;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
-import java.util.List;
+import com.one.aim.bo.OrderBO;
 
 @Repository
 public interface OrderRepo extends JpaRepository<OrderBO, Long> {
 
+    // ==========================================================
+    // BASIC FINDERS
+    // ==========================================================
+
+    // Find all orders of a user
     List<OrderBO> findByUser_Id(Long userId);
 
+    // Find by Razorpay order ID
     OrderBO findByRazorpayorderid(String razorpayorderid);
 
+    // Find by Invoice No
+    OrderBO findByInvoiceno(String invoiceno);
+
+    // Payment Integration – Razorpay Order ID
+    Optional<OrderBO> findByOrderId(String orderId);
+
+
+    // ==========================================================
+    // SELLER — Orders that contain seller’s products
+    // ==========================================================
     @Query("""
         SELECT o FROM OrderBO o
         JOIN o.cartItems c
@@ -25,115 +44,105 @@ public interface OrderRepo extends JpaRepository<OrderBO, Long> {
     """)
     List<OrderBO> findOrdersBySellerId(@Param("sellerId") Long sellerId);
 
-    OrderBO findByInvoiceno(String invoiceno);
 
-    // --------------------------------------------------------
-    // REQUIRED QUERIES FOR SELLER DASHBOARD
-    // --------------------------------------------------------
+    // ==========================================================
+    // ADMIN DASHBOARD ANALYTICS
+    // ==========================================================
 
-    // Total Sales of seller
+    // Total order count
+    long count();
+
+    // Total Revenue (Your friend’s correct method)
+    @Query("SELECT SUM(o.totalAmount) FROM OrderBO o")
+    Long sumTotalAmount();
+
+    // Duplicate of above → still keeping because your code uses it
+    @Query("SELECT SUM(o.totalAmount) FROM OrderBO o")
+    Long getTotalRevenue();
+
+    // Revenue by Month
     @Query("""
-        SELECT SUM(o.totalAmount)
-        FROM OrderBO o 
+        SELECT FUNCTION('MONTH', o.createdAt), SUM(o.totalAmount)
+        FROM OrderBO o
+        WHERE o.createdAt >= :lastMonths
+        GROUP BY FUNCTION('MONTH', o.createdAt)
+    """)
+    List<Object[]> getRevenueByMonth(LocalDateTime lastMonths);
+
+    // Product-wise order distribution
+    @Query("""
+        SELECT p.name, COUNT(o)
+        FROM OrderBO o
         JOIN o.cartItems c
         JOIN c.product p
-        WHERE p.seller.id = :sellerId
+        GROUP BY p.name
     """)
-    Long getTotalSalesBySeller(@Param("sellerId") String sellerId);
+    List<Object[]> getOrderDistribution();
 
 
-    // Total Orders count of seller
+    // ==========================================================
+    // FRIEND’S METHOD (KEEP THIS)
+    // ==========================================================
+    List<OrderBO> findAllByUserIdOrderByOrderTimeDesc(Long userId);
+
+    // 1️⃣ Order volume (last 30 days)
     @Query("""
         SELECT COUNT(o)
-        FROM OrderBO o 
-        JOIN o.cartItems c
-        JOIN c.product p
-        WHERE p.seller.id = :sellerId
+        FROM OrderBO o
+        WHERE o.orderStatus = 'DELIVERED'
+          AND o.orderTime BETWEEN :start AND :end
     """)
-    Long countBySellerId(@Param("sellerId") String sellerId);
+    Long getOrderVolume(LocalDateTime start, LocalDateTime end);
+
+    // 2️⃣ Weekly active users
+    @Query("""
+        SELECT COUNT(DISTINCT o.user.id)
+        FROM OrderBO o
+        WHERE o.orderTime BETWEEN :start AND :end
+    """)
+    Long getActiveUsers(LocalDateTime start, LocalDateTime end);
 
 
-    // Last month sales
+    // Unique customers for seller
+    @Query("""
+           SELECT COUNT(DISTINCT o.user.id)
+           FROM OrderBO o
+           JOIN o.orderItems oi
+           WHERE oi.sellerId = :sellerId
+             AND o.createdAt BETWEEN :start AND :end
+           """)
+    Long countSellerUniqueCustomers(@Param("sellerId") Long sellerId,
+                                    @Param("start") LocalDateTime start,
+                                    @Param("end") LocalDateTime end);
+
+    // Returning customers (native SQL)
     @Query(value = """
-    	    SELECT COUNT(o.id)
-    	    FROM orders o
-    	    JOIN cart_items ci ON ci.order_id = o.id
-    	    JOIN product p ON p.id = ci.product_id
-    	    WHERE p.seller_id = :sellerId
-    	    AND o.created_at >= NOW() - INTERVAL 1 MONTH
-    """, nativeQuery = true)
-    Long getLastMonthSalesBySeller(@Param("sellerId") String sellerId);
+           SELECT COUNT(*) FROM (
+               SELECT o.user_id, COUNT(o.id) AS cnt
+               FROM orders o
+               JOIN order_items oi ON oi.order_id = o.id
+               WHERE oi.seller_id = :sellerId
+                 AND o.created_at BETWEEN :start AND :end
+               GROUP BY o.user_id
+               HAVING COUNT(o.id) >= 2
+           ) AS t
+           """, nativeQuery = true)
+    Long countSellerReturningCustomers(@Param("sellerId") Long sellerId,
+                                       @Param("start") LocalDateTime start,
+                                       @Param("end") LocalDateTime end);
 
-
-    // Last month Orders
+    // Total seller orders
     @Query("""
-    		SELECT COUNT(o)
-    		FROM OrderBO o
-    		JOIN o.cartItems ci
-    		JOIN ci.product p
-    		WHERE p.seller.id = :sellerId
-    		AND o.createdAt >= :startDate
-    		""")
-    		Long getLastMonthOrderCountBySeller(
-    		        @Param("sellerId") String sellerId,
-    		        @Param("startDate") LocalDateTime startDate
-    		);
+           SELECT COUNT(DISTINCT o.id)
+           FROM OrderBO o
+           JOIN o.orderItems oi
+           WHERE oi.sellerId = :sellerId
+             AND o.createdAt BETWEEN :start AND :end
+           """)
+    Long countSellerOrders(@Param("sellerId") Long sellerId,
+                           @Param("start") LocalDateTime start,
+                           @Param("end") LocalDateTime end);
 
 
-    // Recent Orders (limit 10)
-    @Query("""
-    		SELECT o.id, u.fullName, o.createdAt, o.orderStatus, o.totalAmount
-    		FROM OrderBO o
-    		JOIN o.user u
-    		WHERE o.id IN (
-    		    SELECT DISTINCT o2.id
-    		    FROM OrderBO o2
-    		    JOIN o2.cartItems ci
-    		    JOIN ci.product p
-    		    WHERE p.seller.id = :sellerId
-    		)
-    		ORDER BY o.createdAt DESC
-    		""")
-    		List<Object[]> findRecentOrdersBySeller(@Param("sellerId") String sellerId);
-
-    // Sales by Product per Day (for bar graph)
-    @Query("""
-        SELECT p.name, TO_CHAR(o.createdAt, 'DD'), SUM(o.totalAmount)
-        FROM OrderBO o
-        JOIN o.cartItems c
-        JOIN c.product p
-        WHERE p.seller.id = :sellerId
-        GROUP BY p.name, TO_CHAR(o.createdAt, 'DD')
-        ORDER BY p.name ASC
-    """)
-    List<Object[]> getSalesByProductPerDay(@Param("sellerId") String sellerId);
-
-
-    // Today Sales
-    @Query("""
-        SELECT SUM(o.totalAmount)
-        FROM OrderBO o
-        JOIN o.cartItems c
-        JOIN c.product p
-        WHERE p.seller.id = :sellerId
-        AND DATE(o.createdAt) = CURRENT_DATE
-    """)
-    Double getTodaySales(@Param("sellerId") String sellerId);
-
-
-    // Yesterday Sales
-    @Query("""
-    		SELECT SUM(o.totalAmount)
-    		FROM OrderBO o
-    		JOIN o.cartItems ci
-    		JOIN ci.product p
-    		WHERE p.seller.id = :sellerId
-    		AND o.createdAt BETWEEN :start AND :end
-    		""")
-    		Double getSalesBetween(
-    		        @Param("sellerId") String sellerId,
-    		        @Param("start") LocalDateTime start,
-    		        @Param("end") LocalDateTime end
-    		);
-
+    boolean existsByShippingAddress(AddressBO address);
 }

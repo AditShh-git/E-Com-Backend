@@ -2,6 +2,7 @@ package com.one.aim.service;
 
 import com.one.aim.rq.UpdateRq;
 
+import com.one.aim.rq.UserFilterRequest;
 import com.one.aim.rq.UserRq;
 import com.one.vm.core.BaseRs;
 
@@ -17,8 +18,12 @@ public interface UserService {
     //  Retrieve all users (admin only)
     BaseRs retrieveAllUser() throws Exception;
 
+
     //  Delete user (admin)
     BaseRs deleteUser(String id) throws Exception;
 
-    BaseRs verifyEmail(String token);
+    BaseRs deleteMyAccount() throws Exception;
+
+
+//    BaseRs verifyEmail(String token);
 }

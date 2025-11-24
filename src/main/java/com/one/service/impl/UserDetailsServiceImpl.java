@@ -36,41 +36,55 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
 
-        log.debug("Attempting authentication for email: {}", email);
+        email = email.toLowerCase().trim();
+        log.debug("Authenticating {}", email);
 
-        // 1. ADMIN
+        // ADMIN
         AdminBO admin = adminRepo.findByEmail(email).orElse(null);
         if (admin != null) {
-            log.info("Authenticated [ADMIN] ({})", admin.getEmail());
-            return new UserDetailsImpl(
-                    admin.getId(),
-                    admin.getEmail(),
-                    admin.getFullName(),
-                    admin.getPassword(),
-                    true,       // emailVerified always true for admin
-                    true,       // accountVerified always true
-                    List.of(new SimpleGrantedAuthority("ADMIN"))
-            );
+            if (!admin.isEmailVerified()) {
+                throw new UsernameNotFoundException("Email not verified.");
+            }
+            return UserDetailsImpl.build(admin);
         }
 
-        // 2. SELLER
+        // SELLER
         SellerBO seller = sellerRepo.findByEmail(email).orElse(null);
         if (seller != null) {
-            log.info("Authenticated [SELLER] ({})", seller.getEmail());
+
+            if (!seller.isEmailVerified()) {
+                throw new UsernameNotFoundException("Email not verified.");
+            }
+
+            if (seller.isLocked()) {
+                throw new UsernameNotFoundException("Seller account is locked.");
+            }
+
             return UserDetailsImpl.build(seller);
         }
 
-        // 3. USER
+        // USER
         UserBO user = userRepo.findByEmail(email).orElse(null);
         if (user != null) {
-            log.info("Authenticated [USER] ({})", user.getEmail());
+
+            if (Boolean.TRUE.equals(user.getDeleted())) {
+                throw new UsernameNotFoundException("Account deleted.");
+            }
+
+            if (!Boolean.TRUE.equals(user.getActive())) {
+                throw new UsernameNotFoundException("Account disabled.");
+            }
+
+            if (!Boolean.TRUE.equals(user.getEmailVerified())) {
+                throw new UsernameNotFoundException("Email not verified.");
+            }
+
             return UserDetailsImpl.build(user);
         }
 
-        // 4. VENDOR
+        // VENDOR
         VendorBO vendor = vendorRepo.findByEmail(email).orElse(null);
         if (vendor != null) {
-            log.info("Authenticated [VENDOR] ({})", vendor.getEmail());
             return new UserDetailsImpl(
                     vendor.getId(),
                     vendor.getEmail(),
@@ -82,21 +96,20 @@ public class UserDetailsServiceImpl implements UserDetailsService {
             );
         }
 
-        // 5. DELIVERY PERSON
-        DeliveryPersonBO delivery = deliveryPersonRepo.findByEmail(email).orElse(null);
-        if (delivery != null) {
-            log.info("Authenticated [DELIVERY_PERSON] ({})", delivery.getEmail());
+        // DELIVERY PERSON
+        DeliveryPersonBO dp = deliveryPersonRepo.findByEmail(email).orElse(null);
+        if (dp != null) {
             return new UserDetailsImpl(
-                    delivery.getId(),
-                    delivery.getEmail(),
-                    delivery.getFullName(),
-                    delivery.getPassword(),
+                    dp.getId(),
+                    dp.getEmail(),
+                    dp.getFullName(),
+                    dp.getPassword(),
                     true,
                     true,
                     List.of(new SimpleGrantedAuthority("DELIVERY_PERSON"))
             );
         }
 
-        throw new UsernameNotFoundException("User not found with email: " + email);
+        throw new UsernameNotFoundException("No account found with email: " + email);
     }
 }

@@ -11,30 +11,39 @@ import com.one.utils.Utils;
 
 import lombok.extern.slf4j.Slf4j;
 
-@Slf4j
 public class WishlistMapper {
 
+    // Single product mapping
     public static WishlistRs mapToWishlistRs(ProductBO product) {
 
-        WishlistRs rs = new WishlistRs();
+        if (product == null) return null;
 
-        rs.setProductId(String.valueOf(product.getId()));
-        rs.setName(product.getName());
-        rs.setDescription(product.getDescription());
-        rs.setPrice(product.getPrice());
-        rs.setCategory(product.getCategoryName());
+        String firstImageUrl = null;
 
         if (product.getImageFileIds() != null && !product.getImageFileIds().isEmpty()) {
-            rs.setImageId(product.getImageFileIds().get(0)); // first image
+            Long imageId = product.getImageFileIds().get(0);
+            firstImageUrl = "/api/files/public/" + imageId + "/view";
         }
 
-        return rs;
+        return WishlistRs.builder()
+                .productId(product.getId())
+                .productName(product.getName())
+                .price(product.getPrice())
+                .inStock(product.getStock() != null && product.getStock() > 0)
+                .lowStock(product.isLowStock())
+                .productImageUrl(firstImageUrl)
+                .categoryName(product.getCategoryName())
+                .build();
     }
 
+
+    // List mapping
     public static List<WishlistRs> mapToWishlistRsList(List<ProductBO> products) {
+        if (products == null || products.isEmpty()) return List.of();
+
         return products.stream()
                 .map(WishlistMapper::mapToWishlistRs)
                 .toList();
     }
-
 }
+

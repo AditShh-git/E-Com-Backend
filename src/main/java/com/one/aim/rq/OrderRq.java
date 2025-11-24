@@ -15,12 +15,9 @@ public class OrderRq extends BaseVM {
 
     private static final long serialVersionUID = 1L;
 
-    private String paymentMethod;   // COD / UPI / CARD / NETBANKING
+    private Long addressId;
 
-    // CartId → quantity
-    private Map<String, Integer> totalCarts;
 
-    // Shipping address
     private String fullName;
     private String street;
     private String city;
@@ -28,4 +25,9 @@ public class OrderRq extends BaseVM {
     private String zip;
     private String country;
     private String phone;
+
+    private String paymentMethod;
+
+
+    private Long amount;
 }
