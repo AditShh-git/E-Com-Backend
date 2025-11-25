@@ -50,22 +50,17 @@ public class AdminController {
     // ============================================================
     // CREATE ADMIN (REGISTER)
     // ============================================================
-    @PostMapping(
-            value = "/create",
-            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
-    )
+    @PostMapping(value = "/create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<BaseRs> createAdmin(
             @ModelAttribute AdminRq rq,
-            @RequestParam(value = "file", required = false) MultipartFile file
+            @RequestParam(value = "image", required = false) MultipartFile file
     ) throws Exception {
-
-        log.debug("Executing [POST /api/admin/create]");
-
 
         if (file != null && !file.isEmpty()) {
             rq.setImage(file);
         }
 
+        System.out.println("IMAGE RECEIVED? " + rq.getImage());
         return ResponseEntity.ok(adminService.createAdmin(rq));
     }
 

@@ -16,7 +16,8 @@ public interface AdminSettingService {
 
     void initDefaultSettings();
 
-    String verifySeller(Long sellerId, Boolean status);
+    String verifySeller(String sellerIdentifier, Boolean status);
+
 
     List<SellerRs> getUnverifiedSellers();
     List<SellerRs> getVerifiedSellers();

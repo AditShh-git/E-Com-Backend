@@ -67,13 +67,12 @@ public class AdminSettingController {
 // ==============================
     @PostMapping("/seller/verify")
     public ResponseEntity<?> verifySeller(
-            @RequestParam Long sellerId,
+            @RequestParam String sellerId,
             @RequestParam Boolean status) {
-
-        log.info("Admin verifying seller {} => {}", sellerId, status);
 
         return ResponseEntity.ok(adminSettingService.verifySeller(sellerId, status));
     }
+
 
     // ==============================
 // LIST UNVERIFIED SELLERS

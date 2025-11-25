@@ -1,9 +1,6 @@
 package com.one.aim.controller;
 
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import com.one.aim.rq.SellerDashboardRq;
 import com.one.aim.service.SellerDashboardService;
@@ -19,8 +16,9 @@ public class SellerDashboardController {
         this.sellerDashboardService = sellerDashboardService;
     }
 
-    @PostMapping("/overview")
-    public BaseRs getSellerDashboard(@RequestBody SellerDashboardRq rq) throws Exception {
-        return sellerDashboardService.getSellerOverview(rq.getSellerId());
+    @GetMapping("/overview")
+    public BaseRs getSellerOverview() throws Exception {
+        return sellerDashboardService.getSellerOverview();
     }
+
 }

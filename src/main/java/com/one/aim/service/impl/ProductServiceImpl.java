@@ -1,11 +1,13 @@
 package com.one.aim.service.impl;
 
+import com.one.aim.bo.CategoryBO;
 import com.one.aim.bo.FileBO;
 import com.one.aim.bo.ProductBO;
 import com.one.aim.bo.SellerBO;
 import com.one.aim.constants.ErrorCodes;
 import com.one.aim.helper.ProductHelper;
 import com.one.aim.mapper.ProductMapper;
+import com.one.aim.repo.CategoryRepo;
 import com.one.aim.repo.ProductRepo;
 import com.one.aim.repo.SellerRepo;
 import com.one.aim.rq.ProductRq;
@@ -14,6 +16,7 @@ import com.one.aim.rs.data.ProductDataRs;
 import com.one.aim.rs.data.ProductDataRsList;
 import com.one.aim.service.FileService;
 import com.one.aim.service.ProductService;
+import com.one.exception.BaseException;
 import com.one.utils.AuthUtils;
 import com.one.utils.Utils;
 import com.one.vm.core.BaseDataRs;
@@ -43,6 +46,7 @@ public class ProductServiceImpl implements ProductService {
     private final SellerRepo sellerRepo;
     private final FileService fileService;
     private final UserActivityService userActivityService;
+    private final CategoryRepo  categoryRepo;
 
     @Value("${app.frontend.product.url}")
     private String productFrontUrl;
@@ -75,10 +79,33 @@ public class ProductServiceImpl implements ProductService {
             bo.setDescription(rq.getDescription());
             bo.setPrice(rq.getPrice());
             bo.setStock(rq.getStock());
-            bo.setCategoryName(rq.getCategoryName());
             bo.setSeller(seller);
             bo.setSlug(generateUniqueSlug(rq.getName()));
 
+            // CATEGORY HANDLING
+            if (rq.getCategoryId() != null) {
+
+                CategoryBO category = categoryRepo.findById(rq.getCategoryId())
+                        .orElse(null);
+
+                if (category == null) {
+                    return ResponseUtils.failure(ErrorCodes.EC_RECORD_NOT_FOUND, "Category not found");
+                }
+
+                bo.setCategoryId(category.getId());
+                bo.setCategoryName(category.getName());
+            }
+            else {
+                // CUSTOM CATEGORY
+                if (Utils.isEmpty(rq.getCustomCategoryName())) {
+                    return ResponseUtils.failure(ErrorCodes.EC_INVALID_INPUT, "Custom category name required");
+                }
+
+                bo.setCategoryId(null);
+                bo.setCategoryName(rq.getCustomCategoryName());
+            }
+
+            // Upload images
             if (rq.getImages() != null) {
                 for (MultipartFile file : rq.getImages()) {
                     if (!file.isEmpty()) {
@@ -90,26 +117,18 @@ public class ProductServiceImpl implements ProductService {
 
             productRepo.save(bo);
 
-            // -----------------------------------------------------
-            // USER ACTIVITY LOG — PRODUCT CREATED
-            // -----------------------------------------------------
-            userActivityService.log(
-                    sellerId,
-                    "PRODUCT_CREATED",
-                    "Created product: " + bo.getName()
-            );
+            userActivityService.log(sellerId,"PRODUCT_CREATED","Created product: " + bo.getName());
 
             ProductRs rs = ProductMapper.mapToProductRs(bo, fileService);
             return ResponseUtils.success(new ProductDataRs("Product created successfully", rs));
-        }
-        catch (RuntimeException ex) {
-            return ResponseUtils.failure("EC_ADMIN_APPROVAL_REQUIRED", ex.getMessage());
+
         }
         catch (Exception e) {
             log.error("addProduct() failed", e);
             return ResponseUtils.failure(ErrorCodes.EC_INTERNAL_ERROR, e.getMessage());
         }
     }
+
 
 
     // ===========================================================
@@ -138,31 +157,44 @@ public class ProductServiceImpl implements ProductService {
                 return ResponseUtils.failure(ErrorCodes.EC_UNAUTHORIZED, "You cannot edit another seller's product");
             }
 
+            // BASIC FIELDS
             if (Utils.isNotEmpty(rq.getName())) bo.setName(rq.getName());
             if (Utils.isNotEmpty(rq.getDescription())) bo.setDescription(rq.getDescription());
             if (rq.getPrice() != null) bo.setPrice(rq.getPrice());
             if (rq.getStock() != null) bo.setStock(rq.getStock());
-            if (Utils.isNotEmpty(rq.getCategoryName())) bo.setCategoryName(rq.getCategoryName());
+
+            // CATEGORY UPDATE
+            if (rq.getCategoryId() != null) {
+
+                CategoryBO category = categoryRepo.findById(rq.getCategoryId()).orElse(null);
+
+                if (category == null) {
+                    return ResponseUtils.failure(ErrorCodes.EC_RECORD_NOT_FOUND, "Category not found");
+                }
+
+                bo.setCategoryId(category.getId());
+                bo.setCategoryName(category.getName());
+            }
+            else if (Utils.isNotEmpty(rq.getCustomCategoryName())) {
+
+                bo.setCategoryId(null);
+                bo.setCategoryName(rq.getCustomCategoryName());
+            }
 
             productRepo.save(bo);
 
-            // -----------------------------------------------------
-            // USER ACTIVITY LOG — PRODUCT UPDATED
-            // -----------------------------------------------------
-            userActivityService.log(
-                    sellerId,
-                    "PRODUCT_UPDATED",
-                    "Updated product: " + bo.getName()
-            );
+            userActivityService.log(sellerId,"PRODUCT_UPDATED","Updated product: " + bo.getName());
 
             ProductRs rs = ProductMapper.mapToProductRs(bo, fileService);
             return ResponseUtils.success(new ProductDataRs("Product updated successfully", rs));
+
         }
         catch (Exception e) {
             log.error("updateProduct() failed", e);
             return ResponseUtils.failure(ErrorCodes.EC_INTERNAL_ERROR, e.getMessage());
         }
     }
+
 
 
     // ===========================================================
@@ -364,17 +396,29 @@ public class ProductServiceImpl implements ProductService {
     public BaseRs listProducts(int offset, int limit) {
 
         try {
-            Pageable pageable = PageRequest.of(offset, limit);
-            Page<ProductBO> page = productRepo.findAll(pageable);
+            if (limit <= 0) limit = 20;
+            if (offset < 0) offset = 0;
 
-            List<ProductRs> rsList = ProductMapper.mapToProductRsList(page.getContent(), fileService);
-            return ResponseUtils.success(new ProductDataRsList("Products retrieved", rsList));
+            int page = offset / limit;
+
+            Pageable pageable = PageRequest.of(page, limit);
+
+            Page<ProductBO> pageData = productRepo.findAll(pageable);
+
+            List<ProductRs> rsList =
+                    ProductMapper.mapToProductRsList(pageData.getContent(), fileService);
+
+            return ResponseUtils.success(
+                    new ProductDataRsList("Products retrieved successfully", rsList)
+            );
+
         }
         catch (Exception e) {
             log.error("listProducts() failed", e);
             return ResponseUtils.failure(ErrorCodes.EC_INTERNAL_ERROR, e.getMessage());
         }
     }
+
 
 
     @Override

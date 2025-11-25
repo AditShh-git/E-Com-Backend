@@ -13,7 +13,6 @@ import java.util.List;
 @NoArgsConstructor
 public class ProductRs implements Serializable {
 
-
     private static final long serialVersionUID = 1L;
 
     private String docId;
@@ -22,6 +21,7 @@ public class ProductRs implements Serializable {
     private Double price;
     private Integer stock;
     private String categoryName;
+    private Long categoryId;        // NEW
     private Integer quantity = 1;
 
     // Seller details
@@ -32,7 +32,7 @@ public class ProductRs implements Serializable {
     // Multiple image URLs
     private List<String> imageUrls = new ArrayList<>();
 
-    // Optional – used in shareable links
+    //  used in shareable links
     private String shareMessage;
-
 }
+

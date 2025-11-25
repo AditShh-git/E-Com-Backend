@@ -55,7 +55,7 @@ public class OrderBO {
             joinColumns = @JoinColumn(name = "order_id"),
             inverseJoinColumns = @JoinColumn(name = "cart_id")
     )
-    private List<CartBO> cartItems = new ArrayList<>();
+    private List<CartBO> cartItems;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItemBO> orderItems = new ArrayList<>();

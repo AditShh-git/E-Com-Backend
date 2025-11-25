@@ -48,8 +48,11 @@ public class ProductBO {
     @Column(name = "image_file_id")
     private List<Long> imageFileIds = new ArrayList<>();
 
-    //  Optional category text (until CategoryBO is ready)
+    //  Optional category text
     private String categoryName;
+
+    private Long categoryId;
+
 
     //  Unique slug or UUID for shareable links
     @Column(unique = true, nullable = false, updatable = false)

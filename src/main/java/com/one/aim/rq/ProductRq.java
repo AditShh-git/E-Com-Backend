@@ -17,7 +17,7 @@ public class ProductRq extends BaseVM {
 
     private static final long serialVersionUID = 1L;
 
-    private String docId; // product ID for updates
+    private String docId;
 
     @NotBlank(message = "Product name is required")
     @Size(max = 100, message = "Product name must be under 100 characters")
@@ -35,6 +35,8 @@ public class ProductRq extends BaseVM {
     @Min(value = 0, message = "Stock cannot be negative")
     private Integer stock;
 
+    private Long categoryId;
+    private String customCategoryName;
     private String categoryName;
 
     //  Multiple images for upload

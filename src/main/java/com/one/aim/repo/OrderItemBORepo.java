@@ -1,6 +1,7 @@
 package com.one.aim.repo;
 
 import com.one.aim.bo.OrderItemBO;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -116,6 +117,78 @@ public interface OrderItemBORepo extends JpaRepository<OrderItemBO, Long> {
            """)
     List<Object[]> getSellerMonthlyRevenue(@Param("sellerId") Long sellerId,
                                            @Param("year") int year);
+
+
+    @Query("""
+    SELECT oi2.product.id, oi2.productName, SUM(oi2.quantity) AS freq
+    FROM OrderItemBO oi1
+    JOIN oi1.order o
+    JOIN o.orderItems oi2
+    WHERE oi1.product.id = :productId
+      AND oi2.product.id <> :productId
+      AND o.orderStatus = 'DELIVERED'
+    GROUP BY oi2.product.id, oi2.productName
+    ORDER BY freq DESC
+""")
+    List<Object[]> findFrequentlyBoughtTogether(@Param("productId") Long productId, Pageable pageable);
+
+
+    @Query("""
+    SELECT oi.product.id, oi.productName, SUM(oi.quantity) AS freq
+    FROM OrderItemBO oi
+    WHERE oi.order.user.id IN (
+        SELECT o.user.id FROM OrderBO o
+        JOIN o.orderItems oi1
+        WHERE oi1.product.id = :productId
+    )
+    AND oi.product.id <> :productId
+    GROUP BY oi.product.id, oi.productName
+    ORDER BY freq DESC
+""")
+    List<Object[]> findPeopleAlsoBought(@Param("productId") Long productId, Pageable pageable);
+
+
+    @Query("""
+    SELECT oi.product.id, oi.productName, SUM(oi.quantity) AS qty
+    FROM OrderItemBO oi
+    WHERE oi.productCategory = :category
+      AND oi.createdAt BETWEEN :start AND :end
+      AND oi.order.orderStatus = 'DELIVERED'
+    GROUP BY oi.product.id, oi.productName
+    ORDER BY qty DESC
+""")
+    List<Object[]> findTopSellingByCategory(
+            @Param("category") String category,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            Pageable pageable
+    );
+
+
+    @Query("""
+    SELECT oi.product.id, oi.productName, SUM(oi.quantity) AS qty
+    FROM OrderItemBO oi
+    WHERE oi.createdAt BETWEEN :start AND :end
+      AND oi.order.orderStatus = 'DELIVERED'
+    GROUP BY oi.product.id, oi.productName
+    ORDER BY qty DESC
+""")
+    List<Object[]> findTopSelling(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            Pageable pageable
+    );
+
+
+    @Query("""
+    SELECT DISTINCT oi.product.id
+    FROM OrderItemBO oi
+    WHERE oi.order.user.id = :userId
+""")
+    List<Long> findProductIdsPurchasedByUser(@Param("userId") Long userId);
+
+
+
 
 
 }

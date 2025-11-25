@@ -81,47 +81,44 @@ public class AdminSettingServiceImpl implements AdminSettingService {
     }
 
 
-    // ===========================================
-// VERIFY SELLER (ADMIN APPROVAL)
-// ===========================================
-    @Override
-    public String verifySeller(Long sellerId, Boolean status) {
+    public String verifySeller(String idOrCode, Boolean status) {
 
-        SellerBO seller = sellerRepo.findById(sellerId)
-                .orElseThrow(() -> new RuntimeException("Seller not found"));
+        SellerBO seller;
 
-        // =============== ADMIN APPROVES SELLER ===============
+        // Check if numeric → internal DB ID
+        if (idOrCode.matches("\\d+")) {
+            seller = sellerRepo.findById(Long.parseLong(idOrCode))
+                    .orElseThrow(() -> new RuntimeException("Seller not found"));
+        }
+        else {
+            // Otherwise treat as custom code "SLR-123456"
+            seller = sellerRepo.findBySellerId(idOrCode)
+                    .orElseThrow(() -> new RuntimeException("Seller not found"));
+        }
+
+        // ---- Existing Logic ----
         if (status) {
-
-            // Only approve if not approved previously
             if (!seller.isVerified()) {
+                seller.setVerified(true);
+                seller.setLocked(false);
 
-                seller.setVerified(true);   // Admin approved
-                seller.setLocked(false);    // Ensure seller can login & perform actions
-
-                // Send approval mail
                 emailService.sendSellerApprovalEmail(
                         seller.getEmail(),
                         seller.getFullName()
                 );
-
                 sellerRepo.save(seller);
-                return "Seller approved successfully. Approval email sent.";
+                return "Seller approved successfully. Email sent.";
             }
-
             return "Seller already verified.";
         }
 
-        // =============== ADMIN REJECTS/UNVERIFIES SELLER ===============
-        seller.setVerified(false);   // Admin removed approval
-        seller.setLocked(false);     //  Keep unlocked so seller can still login
-
-        // Seller CAN login → but cannot do any actions
-        // Your validateSellerAccess() already blocks actions when verified = false
+        seller.setVerified(false);
+        seller.setLocked(false);
 
         sellerRepo.save(seller);
-        return "Seller marked as unverified. Seller can login but cannot perform actions.";
+        return "Seller marked as unverified.";
     }
+
 
 
 

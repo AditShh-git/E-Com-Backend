@@ -10,6 +10,7 @@ import java.util.List;
 
 @Slf4j
 public class ProductMapper {
+
     public static ProductRs mapToProductRs(ProductBO bo, FileService fileService) {
 
         if (bo == null) {
@@ -19,20 +20,26 @@ public class ProductMapper {
 
         ProductRs rs = new ProductRs();
 
+        // Product ID for frontend operations
         rs.setDocId(String.valueOf(bo.getId()));
+
         rs.setName(bo.getName());
         rs.setDescription(bo.getDescription());
 
-        //  FIX: Always return price safely
+        // Safe price
         rs.setPrice(bo.getPrice() == null ? 0.0 : bo.getPrice());
 
-        //  FIX: make stock safe (0 if null)
+        // Safe stock
         rs.setStock(bo.getStock() == null ? 0 : bo.getStock());
 
+        // Category (predefined or custom)
         rs.setCategoryName(bo.getCategoryName());
+        rs.setCategoryId(bo.getCategoryId());
+
+        // Slug
         rs.setSlug(bo.getSlug());
 
-        //  NEW: Most e-commerce sites show "default quantity = 1"
+        // Default quantity
         rs.setQuantity(1);
 
         // Seller name
@@ -48,12 +55,12 @@ public class ProductMapper {
             rs.setImageUrls(urls);
         }
 
-        // Shareable link
-        String shareLink = "http://localhost:8989/aimdev/api/public/product/" + bo.getSlug();
-        rs.setShareMessage("Check out this product: " + bo.getName() + "\n" + shareLink);
+        // Share message will be constructed in service (NOT mapper)
+        rs.setShareMessage(null);
 
         return rs;
     }
+
 
     public static List<ProductRs> mapToProductRsList(List<ProductBO> bos, FileService fileService) {
         if (bos == null || bos.isEmpty()) {
