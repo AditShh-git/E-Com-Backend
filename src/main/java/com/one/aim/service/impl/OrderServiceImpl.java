@@ -11,6 +11,7 @@ import com.one.aim.rq.OrderRq;
 import com.one.aim.rs.data.OrderDataRsList;
 import com.one.aim.service.FileService;
 import com.one.aim.service.InvoiceService;
+import com.one.aim.service.NotificationService;
 import com.one.aim.service.OrderService;
 import com.one.utils.AuthUtils;
 import com.one.utils.InvoiceGenerator;
@@ -46,6 +47,8 @@ public class OrderServiceImpl implements OrderService {
     private final FileService fileService;
     private final SellerRepo sellerRepo;
     private final ProductRepo productRepo;
+    //Notification
+    private final NotificationService notificationService;
 
     public BaseRs getOrders() {
         List<OrderBO> list = orderRepo.findAll();
@@ -143,12 +146,31 @@ public class OrderServiceImpl implements OrderService {
 
         // Seller for order (first product seller)
         SellerBO seller = findSellerFromOrder(order);
+        
+        //Notification seller
+        if (seller != null) {
+            notificationService.send(
+                    seller.getId().toString(),
+                    "SELLER",
+                    "New Order Received",
+                    "You received a new order #" + order.getId() + " Amount: " + totalAmount
+            );
+        }
+
 
         // Invoice number
         String invoiceNo = "AIM" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
         order.setInvoiceno(invoiceNo);
 
         orderRepo.save(order);
+        
+        // Notification - user
+        notificationService.send(
+                userId.toString(),
+                "USER",
+                "Order Placed Successfully",
+                "Your order #" + order.getId() + " was placed. Total Amount: " + totalAmount
+        );
 
         // ------------------------------------------------------------
         // GENERATE AND STORE PDF
@@ -242,6 +264,5 @@ public class OrderServiceImpl implements OrderService {
 
         return product.getSeller();
     }
-
-
+    
 }
