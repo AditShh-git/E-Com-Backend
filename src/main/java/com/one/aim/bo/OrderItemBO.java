@@ -47,20 +47,20 @@ public class OrderItemBO {
     // SNAPSHOT FIELDS (for analytics)
     // =============================
 
-    @Column(nullable = false)
+    @Column(name = "product_name", nullable = false)
     private String productName;
 
-    @Column(nullable = false)
+    @Column(name = "product_category", nullable = false)
     private String productCategory;
 
-    @Column(nullable = false)
-    private Long unitPrice;  // final selling price at order time
+    @Column(name = "unit_price", nullable = false)
+    private Long unitPrice;
 
-    @Column(nullable = false)
+    @Column(name = "quantity", nullable = false)
     private Integer quantity;
 
-    @Column(nullable = false)
-    private Long totalPrice;  // unitPrice * quantity
+    @Column(name = "total_price", nullable = false)
+    private Long totalPrice;
 
 
     // =============================

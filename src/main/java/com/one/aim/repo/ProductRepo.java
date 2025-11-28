@@ -26,5 +26,6 @@ public interface ProductRepo extends JpaRepository<ProductBO, Long> {
 
     Page<ProductBO> findByCategoryId(Long categoryId, Pageable pageable);
 
+    List<ProductBO> findBySellerId(Long sellerId);
 
 }

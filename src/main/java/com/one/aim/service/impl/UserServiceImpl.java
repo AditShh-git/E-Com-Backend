@@ -91,10 +91,7 @@ public class UserServiceImpl implements UserService {
             user.setPassword(passwordEncoder.encode(rq.getPassword()));
         }
 
-        if (rq.getImage() != null && !rq.getImage().isEmpty()) {
-            FileBO uploaded = fileService.uploadAndReturnFile(rq.getImage());
-            user.setImageFileId(uploaded.getId());
-        }
+        // NO IMAGE HANDLING FOR SIGNUP NOW
 
         String token = TokenUtils.generateVerificationToken();
         user.setVerificationToken(token);

@@ -9,7 +9,7 @@ public interface AuthService {
     BaseRs resetPassword(String token, String newPassword);
     BaseRs logout() throws Exception;
 
-    BaseRs verifyEmail(String token, String email);
+    BaseRs verifyEmail(String token);
 
     BaseRs resendVerificationEmail(String email);
 }

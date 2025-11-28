@@ -7,9 +7,7 @@ import com.one.aim.bo.SellerBO;
 import com.one.aim.constants.ErrorCodes;
 import com.one.aim.helper.ProductHelper;
 import com.one.aim.mapper.ProductMapper;
-import com.one.aim.repo.CategoryRepo;
-import com.one.aim.repo.ProductRepo;
-import com.one.aim.repo.SellerRepo;
+import com.one.aim.repo.*;
 import com.one.aim.rq.ProductRq;
 import com.one.aim.rs.ProductRs;
 import com.one.aim.rs.data.ProductDataRs;
@@ -28,9 +26,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 import org.webjars.NotFoundException;
 
 import java.util.ArrayList;
@@ -47,6 +47,8 @@ public class ProductServiceImpl implements ProductService {
     private final FileService fileService;
     private final UserActivityService userActivityService;
     private final CategoryRepo  categoryRepo;
+    private final CartRepo cartRepo;
+    private final ProductImageRepo productImageRepo;
 
     @Value("${app.frontend.product.url}")
     private String productFrontUrl;
@@ -106,7 +108,7 @@ public class ProductServiceImpl implements ProductService {
             }
 
             // Upload images
-            if (rq.getImages() != null) {
+            if (rq.getImages() != null && !rq.getImages().isEmpty()) {
                 for (MultipartFile file : rq.getImages()) {
                     if (!file.isEmpty()) {
                         FileBO uploaded = fileService.uploadAndReturnFile(file);
@@ -114,6 +116,7 @@ public class ProductServiceImpl implements ProductService {
                     }
                 }
             }
+
 
             productRepo.save(bo);
 
@@ -369,11 +372,10 @@ public class ProductServiceImpl implements ProductService {
                 return ResponseUtils.failure(ErrorCodes.EC_UNAUTHORIZED, "Unauthorized action");
             }
 
-            productRepo.delete(bo);
+            //  Instead of deleting — soft delete
+            bo.setActive(false);
+            productRepo.save(bo);
 
-            // -----------------------------------------------------
-            // USER ACTIVITY LOG — PRODUCT DELETED
-            // -----------------------------------------------------
             userActivityService.log(
                     sellerId,
                     "PRODUCT_DELETED",
@@ -387,6 +389,8 @@ public class ProductServiceImpl implements ProductService {
             return ResponseUtils.failure(ErrorCodes.EC_INTERNAL_ERROR, e.getMessage());
         }
     }
+
+
 
 
     // ===========================================================
@@ -470,6 +474,14 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
+    @Override
+    public BaseRs listSellerProducts() {
+        Long sellerId = AuthUtils.findLoggedInUser().getDocId();
+        List<ProductBO> products = productRepo.findBySellerId(sellerId);
+        return ResponseUtils.success(products);
+    }
+
+
 
     // ===========================================================
     // HELPERS
@@ -511,7 +523,8 @@ public class ProductServiceImpl implements ProductService {
         }
 
         if (!seller.isVerified()) {
-            throw new RuntimeException("Your seller account is still pending admin approval.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Your seller account is still pending admin approval.");
+
         }
 
         if (seller.isLocked()) {

@@ -17,15 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.one.aim.rq.SellerRq;
@@ -33,6 +25,7 @@ import com.one.aim.service.SellerService;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.security.Principal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -120,6 +113,34 @@ public class SellerController {
                 .stream()
                 .map(InvoiceMapper::toDto)
                 .toList();
+    }
+
+    @PutMapping(value = "/profile/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> updateSellerProfile(
+            @RequestParam(required = false) String fullName,
+            @RequestParam(required = false) String phoneNo,
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) String password,
+            @RequestParam(required = false) MultipartFile image,
+            Principal principal
+    ) throws Exception {
+
+        log.debug("Executing [PUT /seller/profile/update]");
+
+        if (principal == null) {
+            return ResponseEntity.status(401).body("Unauthorized: No seller logged in");
+        }
+
+        String sellerEmail = principal.getName();
+
+        SellerRq rq = new SellerRq();
+        rq.setFullName(fullName);
+        rq.setPhoneNo(phoneNo);
+        rq.setEmail(email);
+        rq.setPassword(password);
+        rq.setImage(image);
+
+        return ResponseEntity.ok(sellerService.updateSellerProfile(sellerEmail, rq));
     }
 
 }

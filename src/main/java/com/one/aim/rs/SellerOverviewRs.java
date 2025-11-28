@@ -1,25 +1,33 @@
 package com.one.aim.rs;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.one.vm.analytics.TopProductVm;
+import com.one.vm.common.RecentOrderVm;
 import lombok.*;
 
-@Getter
-@Setter
-@NoArgsConstructor
+import java.util.List;
+
+@Data
 @AllArgsConstructor
+@NoArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 @Builder
 public class SellerOverviewRs {
 
-    private Long totalSales;              // last 30 days revenue
-    private Integer salesTrend;           // vs previous 30 days (%)
+    private Stats stats;
+    private List<RecentOrderVm> recentOrders;
+    private List<TopProductVm> topProducts;
 
-    private Double avgOrderValue;         // last 30 days
-    private Integer aovTrend;             // vs previous 30 days (%)
-
-    private Long customerAcquisition;     // unique customers last 30 days
-    private Integer acqTrend;             // vs previous 30 days (%)
-
-    private Double customerRetention;     // % customers with >=2 orders (last 30 days)
-    private Integer retentionTrend;       // vs previous 30 days (%)
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class Stats {
+        private Double totalRevenue;
+        private Long totalOrders;
+        private Integer totalProducts;
+        private Double averageRating;
+    }
 }
+
 
 

@@ -9,6 +9,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.one.aim.bo.CartBO;
@@ -50,6 +51,11 @@ public interface CartRepo extends JpaRepository<CartBO, Long> {
 //    @Transactional
 //    @Query("DELETE FROM CartBO c WHERE c.userAddToCart.id = :userId AND c.enabled = false")
 //    void deleteOldDisabledCart(Long userId);
+
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM CartBO c WHERE c.product.id = :productId")
+    void deleteByProductId(@Param("productId") Long productId);
 
 
 }

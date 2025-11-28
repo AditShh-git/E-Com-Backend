@@ -126,9 +126,11 @@ public class WebSecurityConfig {
                         // PUBLIC AUTH (ALL ROLES)
                         // ======================================
                         .requestMatchers(
-                                "/auth/**",
-                                "/api/files/public/**"
-                        ).permitAll()
+                                "/api/auth/**",
+                                "/api/files/public/**",
+                                "/api/files/private/**"
+
+                ).permitAll()
 
                         // ======================================
                         // PUBLIC SIGNUP ROUTES
@@ -179,6 +181,9 @@ public class WebSecurityConfig {
                                 "/api/seller/all/invoices",
                                 "/api/seller/analytics/**"
                         ).hasAuthority("SELLER")
+
+                        .requestMatchers("/api/admin/category/active")
+                        .hasAnyAuthority("ADMIN", "SELLER")
 
                         // ======================================
                         // ADMIN ROUTES

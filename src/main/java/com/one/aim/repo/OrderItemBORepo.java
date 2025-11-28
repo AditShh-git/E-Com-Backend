@@ -189,6 +189,45 @@ public interface OrderItemBORepo extends JpaRepository<OrderItemBO, Long> {
 
 
 
+    // 1) Daily sales for seller (date, revenue)
+    @Query("""
+    SELECT FUNCTION('DATE', oi.createdAt) AS day, COALESCE(SUM(oi.totalPrice),0)
+    FROM OrderItemBO oi
+    WHERE oi.sellerId = :sellerId
+      AND oi.order.orderStatus = 'DELIVERED'
+      AND oi.createdAt BETWEEN :start AND :end
+    GROUP BY FUNCTION('DATE', oi.createdAt)
+    ORDER BY FUNCTION('DATE', oi.createdAt)
+""")
+    List<Object[]> getSellerDailySales(@Param("sellerId") Long sellerId,
+                                       @Param("start") LocalDateTime start,
+                                       @Param("end") LocalDateTime end);
+
+    // 2) Daily unique order count for seller (date, orders)
+    @Query("""
+    SELECT FUNCTION('DATE', oi.createdAt) AS day, COUNT(DISTINCT oi.order.id)
+    FROM OrderItemBO oi
+    WHERE oi.sellerId = :sellerId
+      AND oi.createdAt BETWEEN :start AND :end
+    GROUP BY FUNCTION('DATE', oi.createdAt)
+    ORDER BY FUNCTION('DATE', oi.createdAt)
+""")
+    List<Object[]> getSellerDailyOrderCount(@Param("sellerId") Long sellerId,
+                                            @Param("start") LocalDateTime start,
+                                            @Param("end") LocalDateTime end);
+
+    // 3) Order status summary for seller (status, count of distinct orders)
+    @Query("""
+    SELECT oi.order.orderStatus, COUNT(DISTINCT oi.order.id)
+    FROM OrderItemBO oi
+    WHERE oi.sellerId = :sellerId
+      AND oi.order.orderStatus IS NOT NULL
+      AND oi.createdAt BETWEEN :start AND :end
+    GROUP BY oi.order.orderStatus
+""")
+    List<Object[]> getSellerOrderStatusSummary(@Param("sellerId") Long sellerId,
+                                               @Param("start") LocalDateTime start,
+                                               @Param("end") LocalDateTime end);
 
 
 }

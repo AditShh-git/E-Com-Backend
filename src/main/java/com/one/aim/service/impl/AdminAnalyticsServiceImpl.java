@@ -45,23 +45,63 @@ public class AdminAnalyticsServiceImpl implements AdminAnalyticsService {
     // ============================== SUMMARY ==============================
     @Override
     public SummaryCardsRs getSummaryCards() {
+
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime start = now.minusDays(30);
+
+        // previous window = 30–60 days ago
         LocalDateTime prevStart = now.minusDays(60);
         LocalDateTime prevEnd = now.minusDays(30);
 
+        // ================================
+        // 1. Revenue + Trend %
+        // ================================
         Long currRevenue = orderItemRepo.getTotalRevenue(start, now);
         Long prevRevenue = orderItemRepo.getTotalRevenue(prevStart, prevEnd);
+
+        currRevenue = currRevenue == null ? 0L : currRevenue;
+        prevRevenue = prevRevenue == null ? 0L : prevRevenue;
+
         int salesTrend = calculatePercentChange(currRevenue, prevRevenue);
 
+        // ================================
+        // 2. New Users
+        // ================================
         Long newUsers = userRepo.countNewUsers(start, now);
+        newUsers = newUsers == null ? 0L : newUsers;
+
+        // ================================
+        // 3. Order Volume
+        // ================================
         Long orderVolume = orderRepo.getOrderVolume(start, now);
+        orderVolume = orderVolume == null ? 0L : orderVolume;
 
+        // ================================
+        // 4. Top Selling Product
+        // ================================
         List<Object[]> top = orderItemRepo.getTopSellingProduct(start, now);
-        String topProduct = top != null && !top.isEmpty() ? top.get(0)[0].toString() : "N/A";
 
-        return mapper.toSummaryCards(currRevenue, salesTrend, newUsers, orderVolume, topProduct);
+        String topProduct = "N/A";
+        if (top != null && !top.isEmpty()) {
+            Object[] row = top.get(0);
+
+            if (row != null && row.length > 0 && row[0] != null) {
+                topProduct = row[0].toString();
+            }
+        }
+
+        // ================================
+        // FINAL RESPONSE
+        // ================================
+        return mapper.toSummaryCards(
+                currRevenue,
+                salesTrend,
+                newUsers,
+                orderVolume,
+                topProduct
+        );
     }
+
 
     // ============================== SALES PERFORMANCE ==============================
     @Override

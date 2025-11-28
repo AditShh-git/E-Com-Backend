@@ -28,10 +28,11 @@ public class ProductController {
     @PreAuthorize("hasAuthority('SELLER')")
     @PostMapping(value = "/add", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<BaseRs> addProduct(@ModelAttribute ProductRq rq) throws Exception {
-        log.debug("Executing RESTfulService [POST /api/seller/product/add]");
         BaseRs response = productService.addProduct(rq);
         return ResponseEntity.ok(response);
     }
+
+
 
     // ===========================================================
     // UPDATE PRODUCT (SELLER ONLY)
@@ -82,4 +83,16 @@ public class ProductController {
         BaseRs response = productService.deleteProduct(productId);
         return ResponseEntity.ok(response);
     }
+
+    // ===========================================================
+// LIST PRODUCTS (SELLER ONLY)
+// ===========================================================
+    @PreAuthorize("hasAuthority('SELLER')")
+    @GetMapping("/list")
+    public ResponseEntity<BaseRs> listMyProducts() throws Exception {
+        log.debug("Executing RESTfulService [GET /api/seller/product/list]");
+        BaseRs response = productService.listSellerProducts();
+        return ResponseEntity.ok(response);
+    }
+
 }

@@ -15,6 +15,7 @@ import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -96,6 +97,9 @@ public class OrderServiceImpl implements OrderService {
         // ------------------------------------------------------------
         // SELECT SHIPPING ADDRESS
         // ------------------------------------------------------------
+        // ------------------------------------------------------------
+// SELECT SHIPPING ADDRESS (robust save for new addresses)
+// ------------------------------------------------------------
         AddressBO shippingAddress;
 
         if (rq.getAddressId() != null) {
@@ -105,8 +109,7 @@ public class OrderServiceImpl implements OrderService {
             if (!shippingAddress.getUserid().equals(userId)) {
                 throw new RuntimeException("Address does not belong to user");
             }
-        } else if (rq.getFullName() != null) {
-
+        } else if (rq.getFullName() != null && !rq.getFullName().isBlank()) {
             shippingAddress = new AddressBO();
             shippingAddress.setFullName(rq.getFullName());
             shippingAddress.setStreet(rq.getStreet());
@@ -117,7 +120,23 @@ public class OrderServiceImpl implements OrderService {
             shippingAddress.setPhone(rq.getPhone());
             shippingAddress.setUserid(userId);
             shippingAddress.setIsDefault(false);
-            addressRepo.save(shippingAddress);
+
+            // Ensure id is null so MySQL auto-increments it
+            try {
+                // Explicitly clear any id just in case object carried one for some reason:
+                // (AddressBO.getId() setter not shown earlier - if present, set to null)
+                // shippingAddress.setId(null);
+
+                // save and flush so we get id immediately and any DB error surfaces here
+                shippingAddress = addressRepo.saveAndFlush(shippingAddress);
+            } catch (DataIntegrityViolationException dive) {
+                log.error("Data integrity error while saving address: {}", dive.getMessage(), dive);
+                // convert to meaningful runtime exception for controller layer
+                throw new RuntimeException("Failed to save address. Please try again or use an existing saved address.");
+            } catch (Exception ex) {
+                log.error("Unexpected error while saving address: {}", ex.getMessage(), ex);
+                throw new RuntimeException("Failed to save address. Please contact support.");
+            }
 
         } else {
             shippingAddress = addressRepo
@@ -165,12 +184,17 @@ public class OrderServiceImpl implements OrderService {
                     .order(order)
                     .product(product)
                     .sellerId(product.getSeller().getId())
-                    .productName(product.getName())
+                    .productName(
+                            product.getName() == null || product.getName().isBlank()
+                                    ? "Unknown Product"
+                                    : product.getName()
+                    )
                     .productCategory(product.getCategoryName())
                     .unitPrice(cart.getPrice())
                     .quantity(cart.getQuantity())
                     .totalPrice(cart.getPrice() * cart.getQuantity())
                     .build();
+
 
             orderItemList.add(item);
         }
@@ -244,7 +268,7 @@ public class OrderServiceImpl implements OrderService {
         Long userId = AuthUtils.getLoggedUserId();
 
         List<OrderBO> orders =
-                orderRepo.findAllByUserIdOrderByOrderTimeDesc(userId);
+                orderRepo.findAllByUser_IdOrderByOrderTimeDesc(userId);
 
         userActivityService.log(
                 userId,

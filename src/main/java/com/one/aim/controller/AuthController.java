@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/auth")
+@RequestMapping("/api/auth")
 @RequiredArgsConstructor
 @Slf4j
 public class AuthController {
@@ -50,13 +50,10 @@ public class AuthController {
     // ===========================================================
     // VERIFY EMAIL (User + Seller + Admin)
     // ===========================================================
-    @PostMapping("/verify-email")
-    public ResponseEntity<BaseRs> verifyEmail(
-            @RequestParam String token,
-            @RequestParam String email
-    ) {
+    @GetMapping("/verify-email")
+    public ResponseEntity<BaseRs> verifyEmail(@RequestParam String token) {
         try {
-            return ResponseEntity.ok(authService.verifyEmail(token, email));
+            return ResponseEntity.ok(authService.verifyEmail(token));
         } catch (Exception e) {
             log.error("Error in verifyEmail(): {}", e.getMessage());
             return ResponseEntity.status(500)

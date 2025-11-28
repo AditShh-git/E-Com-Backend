@@ -16,27 +16,14 @@ import org.springframework.web.multipart.MultipartFile;
 @Getter
 @Setter
 @NoArgsConstructor
-public class UserRq extends BaseVM {
+public class UserRq {
 
-    private static final long serialVersionUID = 1L;
-
-    private String docId;
-
-    @NotBlank(message = "Full Name is required")
     private String fullName;
 
-    @NotBlank(message = "Email is required.")
-    @Email(message = "Invalid email format.")
     private String email;
 
     private String phoneNo;
 
-    @NotBlank(message = "Password is required")
-    @Size(min = 6, message = "Password must be at least 6 characters long")
     private String password;
-
-    @NotBlank(message = "Confirm password is required")
-    private String confirmPassword;
-
-    private MultipartFile image;
 }
+

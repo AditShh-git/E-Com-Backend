@@ -35,17 +35,9 @@ public class UserController {
     // ===========================================================
     // USER SIGNUP
     // ===========================================================
-    @PostMapping(value = "/signup", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> registerUser(
-            @ModelAttribute UserRq rq,
-            @RequestParam(value = "file", required = false) MultipartFile file) throws Exception {
-
+    @PostMapping("/signup")
+    public ResponseEntity<?> registerUser(@RequestBody UserRq rq) throws Exception {
         log.debug("Executing [POST /api/user/signup]");
-
-        if (file != null && !file.isEmpty()) {
-            rq.setImage(file);
-        }
-
         log.info("Processing registration for email: {}", rq.getEmail());
         return ResponseEntity.ok(userService.saveUser(rq));
     }

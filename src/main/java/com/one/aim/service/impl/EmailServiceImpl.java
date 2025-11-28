@@ -38,202 +38,79 @@ public class EmailServiceImpl implements EmailService {
     private final SellerRepo sellerRepo;
     private final AdminRepo adminRepo;
 
-    @Value("${app.frontend.url:http://localhost:3000}")
-    private String frontendUrl;
+    @Value("${app.verify.email.url}")
+    private String verifyEmailUrl;
+
+    @Value("${app.reset.password.url}")
+    private String resetPasswordUrl;
 
     @Value("${spring.mail.username:noreply@oneaim.com}")
     private String fromEmail;
 
+    @Value("${token.expiry.hours}")
+    private int tokenExpiryHours;
 
+    @Async
+    @Override
+    public void sendWelcomeEmail(String toEmail, String fullName) {
+        try {
+            String html = buildWelcomeEmailTemplate(fullName);
+            sendHtmlEmail(toEmail, "Welcome to OneAim 🎉", html);
+        } catch (Exception e) {
+            log.error("Failed to send welcome email to {}: {}", toEmail, e.getMessage(), e);
+            // don't rethrow — welcome email failure shouldn't break flow
+        }
+    }
 
-    // ===========================================================
-    // CHECK EMAIL VERIFIED (Used during login)
-    // ===========================================================
     @Override
     public void checkEmailVerified(UserDetailsImpl userDetails) {
         if (userDetails.isEmailVerified()) return;
         throw new RuntimeException("Please verify your email before logging in.");
     }
 
-
-//
-//    // ===========================================================
-//    // VERIFY EMAIL (User + Seller + Admin)
-//    // ===========================================================
-//    @Override
-//    @Transactional
-//    public BaseRs verifyEmail(String token, String email) {
-//
-//        String cleanEmail = email.trim().toLowerCase();
-//
-//        // ============================================================
-//        // USER VERIFICATION
-//        // ============================================================
-//        Optional<UserBO> userOpt = userRepo.findByEmail(cleanEmail);
-//        if (userOpt.isPresent()) {
-//            UserBO user = userOpt.get();
-//
-//            if (!token.equals(user.getVerificationToken()))
-//                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN);
-//
-//            if (isExpired(user.getVerificationTokenExpiry()))
-//                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
-//
-//            if (user.getPendingEmail() != null) {
-//                user.setEmail(user.getPendingEmail());
-//                user.setPendingEmail(null);
-//            }
-//
-//            user.setEmailVerified(true);
-//            user.setActive(true);
-//            user.setVerificationToken(null);
-//            user.setVerificationTokenExpiry(null);
-//
-//            userRepo.save(user);
-//            return ResponseUtils.success("Email verified successfully.");
-//        }
-//
-//
-//        // ============================================================
-//        // SELLER VERIFICATION (SIGNUP vs EMAIL-UPDATE)
-//        // ============================================================
-//        Optional<SellerBO> sellerOpt = sellerRepo.findByEmailIgnoreCase(cleanEmail);
-//        if (sellerOpt.isPresent()) {
-//
-//            SellerBO seller = sellerOpt.get();
-//
-//            if (!token.equals(seller.getVerificationToken()))
-//                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN);
-//
-//            if (isExpired(seller.getVerificationTokenExpiry()))
-//                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
-//
-//
-//            boolean isEmailUpdate = seller.getPendingEmail() != null;
-//
-//            // --------------------------------------------
-//            // CASE 1: EMAIL UPDATE (NO under-review email)
-//            // --------------------------------------------
-//            if (isEmailUpdate) {
-//
-//                seller.setEmail(seller.getPendingEmail());
-//                seller.setPendingEmail(null);
-//
-//                seller.setEmailVerified(true);
-//                seller.setVerificationToken(null);
-//                seller.setVerificationTokenExpiry(null);
-//
-//                sellerRepo.save(seller);
-//
-//                return ResponseUtils.success("Seller email updated & verified successfully.");
-//            }
-//
-//            // --------------------------------------------
-//            // CASE 2: SIGNUP VERIFICATION (UNDER REVIEW)
-//            // --------------------------------------------
-//            seller.setEmailVerified(true);
-//            seller.setLocked(false);      // can login
-//            seller.setVerified(false);    // awaiting admin approval
-//
-//            seller.setVerificationToken(null);
-//            seller.setVerificationTokenExpiry(null);
-//
-//            sellerRepo.save(seller);
-//
-//            // send under-review mail ONLY on signup
-//            sendSellerUnderReviewEmail(seller.getEmail(), seller.getFullName());
-//
-//            return ResponseUtils.success(
-//                    "Seller signup verified. You can log in now. Admin approval required for product actions."
-//            );
-//        }
-//
-//
-//        // ============================================================
-//        // ADMIN VERIFICATION
-//        // ============================================================
-//        Optional<AdminBO> adminOpt = adminRepo.findByEmailIgnoreCase(cleanEmail);
-//        if (adminOpt.isPresent()) {
-//
-//            AdminBO admin = adminOpt.get();
-//
-//            if (!token.equals(admin.getVerificationToken()))
-//                return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN);
-//
-//            if (isExpired(admin.getVerificationTokenExpiry()))
-//                return ResponseUtils.failure(ErrorCodes.EC_TOKEN_EXPIRED);
-//
-//            admin.setEmailVerified(true);
-//            admin.setActive(true);
-//            admin.setVerificationToken(null);
-//            admin.setVerificationTokenExpiry(null);
-//
-//            adminRepo.save(admin);
-//
-//            return ResponseUtils.success("Admin email verified successfully.");
-//        }
-//
-//        return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND, "Email not registered.");
-//    }
-//
-
-
-
-    // ===========================================================
-    // RESEND VERIFICATION EMAIL (User + Seller + Admin)
-    // ===========================================================
     @Override
     @Transactional
     public BaseRs resendVerificationEmail(String email) {
-
         String cleanEmail = email.trim().toLowerCase();
         String newToken = UUID.randomUUID().toString();
+        LocalDateTime expiry = LocalDateTime.now().plusHours(tokenExpiryHours);
 
-        // USER
         Optional<UserBO> userOpt = userRepo.findByEmail(cleanEmail);
         if (userOpt.isPresent()) {
-
             UserBO user = userOpt.get();
-
             if (user.getEmailVerified())
                 return ResponseUtils.failure(ErrorCodes.EC_EMAIL_ALREADY_VERIFIED);
 
             user.setVerificationToken(newToken);
-            user.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+            user.setVerificationTokenExpiry(expiry);
             userRepo.save(user);
 
             sendVerificationEmail(user.getEmail(), user.getFullName(), newToken);
             return ResponseUtils.success("Verification email sent.");
         }
 
-        // SELLER
         Optional<SellerBO> sellerOpt = sellerRepo.findByEmailIgnoreCase(cleanEmail);
         if (sellerOpt.isPresent()) {
-
             SellerBO seller = sellerOpt.get();
-
             if (seller.isEmailVerified())
                 return ResponseUtils.failure(ErrorCodes.EC_EMAIL_ALREADY_VERIFIED);
 
             seller.setVerificationToken(newToken);
-            seller.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+            seller.setVerificationTokenExpiry(expiry);
             sellerRepo.save(seller);
 
             sendVerificationEmail(seller.getEmail(), seller.getFullName(), newToken);
             return ResponseUtils.success("Verification email sent.");
         }
 
-        // ADMIN
         Optional<AdminBO> adminOpt = adminRepo.findByEmailIgnoreCase(cleanEmail);
         if (adminOpt.isPresent()) {
-
             AdminBO admin = adminOpt.get();
-
             if (admin.isEmailVerified())
                 return ResponseUtils.failure(ErrorCodes.EC_EMAIL_ALREADY_VERIFIED);
 
             admin.setVerificationToken(newToken);
-            admin.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+            admin.setVerificationTokenExpiry(expiry);
             adminRepo.save(admin);
 
             sendVerificationEmail(admin.getEmail(), admin.getFullName(), newToken);
@@ -243,107 +120,66 @@ public class EmailServiceImpl implements EmailService {
         return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND, "Email not registered.");
     }
 
-
-
-    // ===========================================================
-    // EMAIL CHANGE (User / Seller / Admin)
-    // ===========================================================
     @Override
     public void initiateUserEmailChange(UserBO user, String newEmail) {
-        String token = TokenUtils.generateVerificationToken();
-
+        String token = UUID.randomUUID().toString();
         user.setPendingEmail(newEmail);
         user.setVerificationToken(token);
-        user.setVerificationTokenExpiry(TokenUtils.generateExpiry());
-
+        user.setVerificationTokenExpiry(LocalDateTime.now().plusHours(tokenExpiryHours));
         userRepo.save(user);
         sendVerificationEmail(newEmail, user.getFullName(), token);
     }
 
-
     @Override
     public void initiateSellerEmailChange(SellerBO seller, String newEmail) {
-        String token = TokenUtils.generateVerificationToken();
-
+        String token = UUID.randomUUID().toString();
         seller.setPendingEmail(newEmail);
         seller.setVerificationToken(token);
-        seller.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+        seller.setVerificationTokenExpiry(LocalDateTime.now().plusHours(tokenExpiryHours));
         seller.setEmailVerified(false);
         seller.setLocked(true);
-
         sellerRepo.save(seller);
         sendVerificationEmail(newEmail, seller.getFullName(), token);
     }
 
-
     @Override
     public void initiateAdminEmailChange(AdminBO admin, String newEmail) {
-        String token = TokenUtils.generateVerificationToken();
-
+        String token = UUID.randomUUID().toString();
         admin.setEmail(newEmail);
         admin.setVerificationToken(token);
-        admin.setVerificationTokenExpiry(TokenUtils.generateExpiry());
+        admin.setVerificationTokenExpiry(LocalDateTime.now().plusHours(tokenExpiryHours));
         admin.setEmailVerified(false);
-
         adminRepo.save(admin);
         sendVerificationEmail(newEmail, admin.getFullName(), token);
     }
 
-
-
-    // ===========================================================
-    // EMAIL SENDING FUNCTIONS
-    // ===========================================================
     @Async
     public void sendVerificationEmail(String toEmail, String fullName, String token) {
         try {
             String subject = "Verify Your Email - OneAim Platform";
-            String verificationLink = frontendUrl + "/verify-email?token=" + token;
-            String htmlContent = buildVerificationEmailTemplate(fullName, verificationLink);
-
+            String link = verifyEmailUrl + "?token=" + token;
+            String htmlContent = buildVerificationEmailTemplate(fullName, link);
             sendHtmlEmail(toEmail, subject, htmlContent);
-
         } catch (Exception e) {
-            log.error("Failed to send verification email to {}", toEmail, e);
+            log.error("Failed to send verification email to {}: {}", toEmail, e.getMessage(), e);
             throw new EmailSendFailedException("Unable to send verification email.");
         }
     }
 
-
     @Async
     public void sendResetPasswordEmail(String toEmail, String token) {
         try {
-            String resetURL = frontendUrl + "/reset-password?token=" + token;
+            String resetURL = resetPasswordUrl + "?token=" + token;
             String html = buildResetPasswordEmailTemplate(resetURL);
-
             sendHtmlEmail(toEmail, "Reset Password", html);
-
         } catch (Exception e) {
+            log.error("Failed to send reset password email to {}: {}", toEmail, e.getMessage(), e);
             throw new EmailSendFailedException("Unable to send reset password email.");
         }
     }
 
-
-    @Async
-    public void sendWelcomeEmail(String toEmail, String fullName) {
-        try {
-            String html = buildWelcomeEmailTemplate(fullName);
-            sendHtmlEmail(toEmail, "Welcome to OneAim 🎉", html);
-
-        } catch (Exception e) {
-            throw new EmailSendFailedException("Unable to send welcome email.");
-        }
-    }
-
-
-
-    // ===========================================================
-    // SELLER SPECIAL EMAILS
-    // ===========================================================
-    @Override
     @Async
     public void sendSellerUnderReviewEmail(String toEmail, String fullName) {
-
         String subject = "Seller Account Under Review";
         String html = """
             <html><body style='font-family: Arial'>
@@ -359,17 +195,13 @@ public class EmailServiceImpl implements EmailService {
         try {
             sendHtmlEmail(toEmail, subject, html);
         } catch (Exception e) {
-            log.error("Failed to send Seller Under Review email", e);
+            log.error("Failed to send Seller Under Review email to {}: {}", toEmail, e.getMessage(), e);
         }
     }
 
-
-    @Override
     @Async
     public void sendSellerApprovalEmail(String toEmail, String fullName) {
-
         String subject = "Seller Account Approved 🎉";
-
         String html = """
             <html><body style='font-family: Arial'>
                 <h2>Congratulations %s! 🎉</h2>
@@ -383,34 +215,20 @@ public class EmailServiceImpl implements EmailService {
         try {
             sendHtmlEmail(toEmail, subject, html);
         } catch (Exception e) {
-            log.error("Failed to send Seller Approval email", e);
+            log.error("Failed to send Seller Approval email to {}: {}", toEmail, e.getMessage(), e);
         }
     }
 
-
-
-    // ===========================================================
-    // COMMON HTML EMAIL SENDER
-    // ===========================================================
-    private void sendHtmlEmail(String to, String subject, String htmlContent)
-            throws MessagingException {
-
+    private void sendHtmlEmail(String to, String subject, String htmlContent) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
         helper.setFrom(fromEmail);
         helper.setTo(to);
         helper.setSubject(subject);
         helper.setText(htmlContent, true);
-
         mailSender.send(message);
     }
 
-
-
-    // ===========================================================
-    // EMAIL TEMPLATES
-    // ===========================================================
     private String buildVerificationEmailTemplate(String fullName, String link) {
         return """
             <html><body style='font-family: Arial'>
@@ -423,7 +241,6 @@ public class EmailServiceImpl implements EmailService {
             </body></html>
         """.formatted(fullName, link);
     }
-
 
     private String buildResetPasswordEmailTemplate(String resetURL) {
         return """
@@ -440,7 +257,6 @@ public class EmailServiceImpl implements EmailService {
         """.formatted(resetURL);
     }
 
-
     private String buildWelcomeEmailTemplate(String fullName) {
         return """
             <html><body style='font-family: Arial'>
@@ -451,11 +267,6 @@ public class EmailServiceImpl implements EmailService {
         """.formatted(fullName);
     }
 
-
-
-    // ===========================================================
-    // EXPIRY CHECK
-    // ===========================================================
     private boolean isExpired(LocalDateTime expiry) {
         return expiry == null || expiry.isBefore(LocalDateTime.now());
     }

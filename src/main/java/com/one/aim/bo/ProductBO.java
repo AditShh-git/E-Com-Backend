@@ -1,5 +1,6 @@
 package com.one.aim.bo;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -35,12 +36,16 @@ public class ProductBO {
 
     private Integer stock;
 
+    private boolean active = true;
+
     private boolean lowStock = false;
 
 
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "seller_id", nullable = false)
+    @JoinColumn(name = "seller_id")
     private SellerBO seller;
+
 
     //  Multiple image IDs (store FileBO IDs from FileService)
     @ElementCollection

@@ -1,21 +1,20 @@
 package com.one.aim.service.impl;
 
 import com.one.aim.repo.OrderItemBORepo;
-import com.one.aim.repo.OrderRepo;
 import com.one.aim.rs.*;
 import com.one.aim.service.SellerAnalyticsService;
 import com.one.utils.AuthUtils;
+import com.one.vm.analytics.DailyOrderCountVm;
+import com.one.vm.analytics.OrderStatusVm;
+import com.one.vm.analytics.SalesTrendVm;
+import com.one.vm.analytics.TopProductChartVm;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.Month;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -23,162 +22,76 @@ import java.util.Map;
 public class SellerAnalyticsServiceImpl implements SellerAnalyticsService {
 
     private final OrderItemBORepo orderItemRepo;
-    private final OrderRepo orderRepo;
 
     @Override
-    public SellerOverviewRs getOverview() {
-
-        //  Logged-in seller ID (adjust per your AuthUtils)
+    public SellerAnalyticsRs getAnalytics() {
         Long sellerId = AuthUtils.findLoggedInUser().getDocId();
 
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime currStart = now.minusDays(30);
-        LocalDateTime prevStart = now.minusDays(60);
-        LocalDateTime prevEnd = now.minusDays(30);
+        // We'll use a 30-day window for charts (you can change)
+        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime start = end.minusDays(30);
 
-        // ------- current period -------
-        Long currRevenue = orderItemRepo.getSellerTotalRevenue(sellerId, currStart, now);
-        Long currOrders = orderRepo.countSellerOrders(sellerId, currStart, now);
-        Long currUniqueCustomers = orderRepo.countSellerUniqueCustomers(sellerId, currStart, now);
-        Long currReturningCustomers = orderRepo.countSellerReturningCustomers(sellerId, currStart, now);
+        // --------------------
+        // A. Sales trend (daily sales)
+        // --------------------
+        List<Object[]> dailySalesRows = orderItemRepo.getSellerDailySales(sellerId, start, end);
+        List<SalesTrendVm> salesTrend = dailySalesRows.stream()
+                .map(r -> {
+                    // r[0] = java.sql.Date (or LocalDate depending on JPA), r[1] = Number
+                    String day = r[0] == null ? "" : r[0].toString();
+                    Double sales = r[1] == null ? 0.0 : ((Number) r[1]).doubleValue();
+                    return new SalesTrendVm(day, sales);
+                })
+                .toList();
 
-        double currAov = (currOrders != null && currOrders > 0)
-                ? currRevenue.doubleValue() / currOrders
-                : 0.0;
+        // --------------------
+        // B. Top selling products (last 30 days) — reusing existing repo method `findTopSelling`
+        //    your findTopSelling(start,end,pageable) returns productId, productName, qty
+        // --------------------
+        List<Object[]> topRows = orderItemRepo.findTopSelling(start, end, PageRequest.of(0, 5));
+        List<TopProductChartVm> topProducts = topRows.stream()
+                .map(r -> {
+                    // r[0] = productId (Long), r[1] = productName, r[2] = qty
+                    String name = r.length > 1 && r[1] != null ? r[1].toString() : "Unknown";
+                    Long units = r.length > 2 && r[2] != null ? ((Number) r[2]).longValue() : 0L;
+                    return new TopProductChartVm(name, units);
+                })
+                .toList();
 
-        double currRetention = (currUniqueCustomers != null && currUniqueCustomers > 0)
-                ? (currReturningCustomers * 100.0) / currUniqueCustomers
-                : 0.0;
+        // --------------------
+        // C. Order status breakdown (pie)
+        // --------------------
+        List<Object[]> statusRows = orderItemRepo.getSellerOrderStatusSummary(sellerId, start, end);
+        List<OrderStatusVm> orderStatus = statusRows.stream()
+                .map(r -> {
+                    String status = r[0] == null ? "UNKNOWN" : r[0].toString();
+                    Integer count = r[1] == null ? 0 : ((Number) r[1]).intValue();
+                    return new OrderStatusVm(status, count);
+                })
+                .toList();
 
-        // ------- previous period -------
-        Long prevRevenue = orderItemRepo.getSellerTotalRevenue(sellerId, prevStart, prevEnd);
-        Long prevOrders = orderRepo.countSellerOrders(sellerId, prevStart, prevEnd);
-        Long prevUniqueCustomers = orderRepo.countSellerUniqueCustomers(sellerId, prevStart, prevEnd);
-        Long prevReturningCustomers = orderRepo.countSellerReturningCustomers(sellerId, prevStart, prevEnd);
+        // --------------------
+        // D. Recent orders activity (daily order count)
+        // --------------------
+        List<Object[]> dailyOrderRows = orderItemRepo.getSellerDailyOrderCount(sellerId, start, end);
+        List<DailyOrderCountVm> recentActivity = dailyOrderRows.stream()
+                .map(r -> {
+                    String date = r[0] == null ? "" : r[0].toString();
+                    Integer orders = r[1] == null ? 0 : ((Number) r[1]).intValue();
+                    return new DailyOrderCountVm(date, orders);
+                })
+                .toList();
 
-        double prevAov = (prevOrders != null && prevOrders > 0)
-                ? prevRevenue.doubleValue() / prevOrders
-                : 0.0;
-
-        double prevRetention = (prevUniqueCustomers != null && prevUniqueCustomers > 0)
-                ? (prevReturningCustomers * 100.0) / prevUniqueCustomers
-                : 0.0;
-
-        // ------- trends (for green/red indicator) -------
-        int salesTrend = calculatePercentChange(currRevenue, prevRevenue);
-        int aovTrend = calculatePercentChange(currAov, prevAov);
-        int acqTrend = calculatePercentChange(
-                safeLong(currUniqueCustomers),
-                safeLong(prevUniqueCustomers)
+        // --------------------
+        // Build and return
+        // --------------------
+        return new SellerAnalyticsRs(
+                recentActivity,
+                orderStatus,
+                topProducts,
+                salesTrend
         );
-        int retentionTrend = calculatePercentChange(currRetention, prevRetention);
-
-        return SellerOverviewRs.builder()
-                .totalSales(currRevenue)
-                .salesTrend(salesTrend)
-                .avgOrderValue(currAov)
-                .aovTrend(aovTrend)
-                .customerAcquisition(currUniqueCustomers)
-                .acqTrend(acqTrend)
-                .customerRetention(currRetention)
-                .retentionTrend(retentionTrend)
-                .build();
     }
 
-    @Override
-    public SellerSalesTrendRs getSalesTrend() {
 
-        Long sellerId = AuthUtils.findLoggedInUser().getDocId();
-        LocalDate today = LocalDate.now();
-        int year = today.getYear();
-
-        // DB: month -> revenue
-        List<Object[]> rows = orderItemRepo.getSellerMonthlyRevenue(sellerId, year);
-
-        // init map for 12 months
-        Map<Integer, Long> monthlyMap = new HashMap<>();
-        for (int m = 1; m <= 12; m++) {
-            monthlyMap.put(m, 0L);
-        }
-
-        for (Object[] r : rows) {
-            int month = ((Number) r[0]).intValue();
-            Long revenue = ((Number) r[1]).longValue();
-            monthlyMap.put(month, revenue);
-        }
-
-        List<MonthlyRevenueRs> monthlyList = new ArrayList<>();
-        long totalSalesYear = 0L;
-
-        for (int m = 1; m <= 12; m++) {
-            Long rev = monthlyMap.get(m);
-            totalSalesYear += rev;
-            monthlyList.add(
-                    MonthlyRevenueRs.builder()
-                            .month(Month.of(m).name())  // "JAN", "FEB"...
-                            .revenue(rev)
-                            .build()
-            );
-        }
-
-        int currentMonth = today.getMonthValue();
-        Long currMonthRev = monthlyMap.get(currentMonth);
-        Long prevMonthRev = monthlyMap.get(Math.max(currentMonth - 1, 1));
-
-        int percentChange = calculatePercentChange(currMonthRev, prevMonthRev);
-
-        return SellerSalesTrendRs.builder()
-                .monthly(monthlyList)
-                .totalSalesYear(totalSalesYear)
-                .percentChange(percentChange)
-                .build();
-    }
-
-    @Override
-    public List<SellerProductRowRs> getProductPerformance() {
-
-        Long sellerId = AuthUtils.findLoggedInUser().getDocId();
-
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime start = now.minusDays(30);
-
-        List<Object[]> rows = orderItemRepo.getSellerProductPerformance(sellerId, start, now);
-        List<SellerProductRowRs> result = new ArrayList<>();
-
-        for (Object[] r : rows) {
-            String product = (String) r[0];
-            String category = (String) r[1];
-            Long qty = ((Number) r[2]).longValue();
-            Long revenue = ((Number) r[3]).longValue();
-
-            result.add(
-                    SellerProductRowRs.builder()
-                            .product(product)
-                            .category(category)
-                            .totalQuantity(qty)
-                            .revenue(revenue)
-                            .build()
-            );
-        }
-
-        return result;
-    }
-
-    // ----------------- helpers -----------------
-
-    private int calculatePercentChange(Long current, Long previous) {
-        if (previous == null || previous == 0) return 0;
-        double change = ((double) (current - previous) / previous) * 100;
-        return (int) Math.round(change);
-    }
-
-    private int calculatePercentChange(Double current, Double previous) {
-        if (previous == null || previous == 0.0) return 0;
-        double change = ((current - previous) / previous) * 100;
-        return (int) Math.round(change);
-    }
-
-    private Long safeLong(Long val) {
-        return val == null ? 0L : val;
-    }
 }
