@@ -9,6 +9,7 @@ import com.one.aim.rq.OrderRq;
 import com.one.aim.rs.data.OrderDataRsList;
 import com.one.aim.service.FileService;
 import com.one.aim.service.InvoiceService;
+import com.one.aim.service.NotificationService;
 import com.one.aim.service.OrderService;
 import com.one.utils.AuthUtils;
 import com.one.vm.core.BaseRs;
@@ -39,6 +40,8 @@ public class OrderServiceImpl implements OrderService {
     private final FileService fileService;
     private final UserActivityService userActivityService;
     private final ProductRepo productRepo;
+    //Notification
+    private final NotificationService notificationService;
 
     public BaseRs getOrders() {
         List<OrderBO> list = orderRepo.findAll();
@@ -157,6 +160,7 @@ public class OrderServiceImpl implements OrderService {
         order.setShippingAddress(shippingAddress);
         order.setCartItems(cartItems);
 
+<<<<<<< HEAD
         // payment method
         String pm = rq.getPaymentMethod() == null ? "" : rq.getPaymentMethod().trim().toUpperCase();
         order.setPaymentMethod(pm);
@@ -165,11 +169,34 @@ public class OrderServiceImpl implements OrderService {
 
         String invoiceNo = "AIM" + LocalDateTime.now()
                 .format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+=======
+        // Seller for order (first product seller)
+        SellerBO seller = findSellerFromOrder(order);
+        
+        //Notification seller
+        if (seller != null) {
+            notificationService.send(
+                    seller.getId().toString(),
+                    "SELLER",
+                    "New Order Received",
+                    "You received a new order #" + order.getId() + " Amount: " + totalAmount
+            );
+        }
+
+>>>>>>> updated
 
         order.setInvoiceno(invoiceNo);
 
         // save order first
         orderRepo.save(order);
+        
+        // Notification - user
+        notificationService.send(
+                userId.toString(),
+                "USER",
+                "Order Placed Successfully",
+                "Your order #" + order.getId() + " was placed. Total Amount: " + totalAmount
+        );
 
         // ------------------------------------------------------------
         // ORDER ITEMS
@@ -348,4 +375,8 @@ public class OrderServiceImpl implements OrderService {
 
         return (product == null) ? null : product.getSeller();
     }
+<<<<<<< HEAD
+=======
+    
+>>>>>>> updated
 }
