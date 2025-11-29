@@ -96,6 +96,7 @@ public class AuthServiceImpl implements AuthService {
 
             SellerBO seller = sellerRepo.findById(user.getId()).orElse(null);
 
+            rs.setEmpId(seller.getId());
             rs.setSellerId(seller.getSellerId());
             rs.setUsername(seller.getEmail());
             rs.setFullname(seller.getFullName());

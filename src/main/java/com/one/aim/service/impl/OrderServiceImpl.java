@@ -100,9 +100,6 @@ public class OrderServiceImpl implements OrderService {
         // ------------------------------------------------------------
         // SELECT SHIPPING ADDRESS
         // ------------------------------------------------------------
-        // ------------------------------------------------------------
-// SELECT SHIPPING ADDRESS (robust save for new addresses)
-// ------------------------------------------------------------
         AddressBO shippingAddress;
 
         if (rq.getAddressId() != null) {
@@ -112,7 +109,8 @@ public class OrderServiceImpl implements OrderService {
             if (!shippingAddress.getUserid().equals(userId)) {
                 throw new RuntimeException("Address does not belong to user");
             }
-        } else if (rq.getFullName() != null && !rq.getFullName().isBlank()) {
+        } else if (rq.getFullName() != null) {
+
             shippingAddress = new AddressBO();
             shippingAddress.setFullName(rq.getFullName());
             shippingAddress.setStreet(rq.getStreet());
@@ -123,23 +121,7 @@ public class OrderServiceImpl implements OrderService {
             shippingAddress.setPhone(rq.getPhone());
             shippingAddress.setUserid(userId);
             shippingAddress.setIsDefault(false);
-
-            // Ensure id is null so MySQL auto-increments it
-            try {
-                // Explicitly clear any id just in case object carried one for some reason:
-                // (AddressBO.getId() setter not shown earlier - if present, set to null)
-                // shippingAddress.setId(null);
-
-                // save and flush so we get id immediately and any DB error surfaces here
-                shippingAddress = addressRepo.saveAndFlush(shippingAddress);
-            } catch (DataIntegrityViolationException dive) {
-                log.error("Data integrity error while saving address: {}", dive.getMessage(), dive);
-                // convert to meaningful runtime exception for controller layer
-                throw new RuntimeException("Failed to save address. Please try again or use an existing saved address.");
-            } catch (Exception ex) {
-                log.error("Unexpected error while saving address: {}", ex.getMessage(), ex);
-                throw new RuntimeException("Failed to save address. Please contact support.");
-            }
+            addressRepo.save(shippingAddress);
 
         } else {
             shippingAddress = addressRepo
@@ -160,7 +142,6 @@ public class OrderServiceImpl implements OrderService {
         order.setShippingAddress(shippingAddress);
         order.setCartItems(cartItems);
 
-<<<<<<< HEAD
         // payment method
         String pm = rq.getPaymentMethod() == null ? "" : rq.getPaymentMethod().trim().toUpperCase();
         order.setPaymentMethod(pm);
@@ -169,34 +150,11 @@ public class OrderServiceImpl implements OrderService {
 
         String invoiceNo = "AIM" + LocalDateTime.now()
                 .format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
-=======
-        // Seller for order (first product seller)
-        SellerBO seller = findSellerFromOrder(order);
-        
-        //Notification seller
-        if (seller != null) {
-            notificationService.send(
-                    seller.getId().toString(),
-                    "SELLER",
-                    "New Order Received",
-                    "You received a new order #" + order.getId() + " Amount: " + totalAmount
-            );
-        }
-
->>>>>>> updated
 
         order.setInvoiceno(invoiceNo);
 
         // save order first
         orderRepo.save(order);
-        
-        // Notification - user
-        notificationService.send(
-                userId.toString(),
-                "USER",
-                "Order Placed Successfully",
-                "Your order #" + order.getId() + " was placed. Total Amount: " + totalAmount
-        );
 
         // ------------------------------------------------------------
         // ORDER ITEMS
@@ -211,17 +169,12 @@ public class OrderServiceImpl implements OrderService {
                     .order(order)
                     .product(product)
                     .sellerId(product.getSeller().getId())
-                    .productName(
-                            product.getName() == null || product.getName().isBlank()
-                                    ? "Unknown Product"
-                                    : product.getName()
-                    )
+                    .productName(product.getName())
                     .productCategory(product.getCategoryName())
                     .unitPrice(cart.getPrice())
                     .quantity(cart.getQuantity())
                     .totalPrice(cart.getPrice() * cart.getQuantity())
                     .build();
-
 
             orderItemList.add(item);
         }
@@ -274,6 +227,7 @@ public class OrderServiceImpl implements OrderService {
 
         return ResponseUtils.success(response);
     }
+
 
     @Override
     public BaseRs retrieveOrder(Long id) throws Exception {
@@ -375,8 +329,5 @@ public class OrderServiceImpl implements OrderService {
 
         return (product == null) ? null : product.getSeller();
     }
-<<<<<<< HEAD
-=======
-    
->>>>>>> updated
+
 }
