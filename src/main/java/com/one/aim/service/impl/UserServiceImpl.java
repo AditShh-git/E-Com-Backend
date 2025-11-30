@@ -207,9 +207,6 @@ public class UserServiceImpl implements UserService {
     }
 
 
-    // ===========================================================
-    // USER – UPDATE PROFILE
-    // ===========================================================
     @Override
     @Transactional
     public BaseRs updateUserProfile(String email, UpdateRq rq) {
@@ -219,17 +216,23 @@ public class UserServiceImpl implements UserService {
 
         boolean updated = false;
 
+        // -----------------------------
+        // FULL NAME
+        // -----------------------------
         if (Utils.isNotEmpty(rq.getFullName())) {
             user.setFullName(rq.getFullName());
             updated = true;
         }
 
+        // -----------------------------
+        // PHONE NUMBER
+        // -----------------------------
         if (Utils.isNotEmpty(rq.getPhoneNo())) {
+
             String normalized = PhoneUtils.normalize(rq.getPhoneNo());
 
-            if (!normalized.matches("^[6-9]\\d{9}$")) {
+            if (!normalized.matches("^[6-9]\\d{9}$"))
                 return ResponseUtils.failure("EC_INVALID_PHONE", "Invalid mobile number.");
-            }
 
             if (!normalized.equals(user.getPhoneNo())) {
 
@@ -246,30 +249,61 @@ public class UserServiceImpl implements UserService {
             }
         }
 
+        // -----------------------------
+        // REMOVE IMAGE
+        // -----------------------------
+        if (Boolean.TRUE.equals(rq.getRemoveImage())) {
+
+            if (user.getImageFileId() != null) {
+                try {
+                    fileService.deleteFile(user.getImageFileId());
+                } catch (Exception ignore) {}
+
+                user.setImageFileId(null);
+                updated = true;
+            }
+        }
+
+        // -----------------------------
+        // UPLOAD IMAGE (REPLACE)
+        // -----------------------------
         if (rq.getImage() != null && !rq.getImage().isEmpty()) {
+
             try {
+                // delete old image
+                if (user.getImageFileId() != null) {
+                    try { fileService.deleteFile(user.getImageFileId()); }
+                    catch (Exception ignore) {}
+                }
+
                 FileBO uploaded = fileService.uploadAndReturnFile(rq.getImage());
                 user.setImageFileId(uploaded.getId());
+
             } catch (Exception e) {
                 return ResponseUtils.failure("EC_INVALID_IMAGE", "Failed to upload image.");
             }
+
             updated = true;
         }
 
+        // -----------------------------
+        // PASSWORD UPDATE
+        // -----------------------------
         if (rq.hasPasswordUpdate()) {
 
-            if (!rq.isPasswordDataValid()) {
+            if (!rq.isPasswordDataValid())
                 return ResponseUtils.failure("EC_INVALID_PASSWORD", rq.passwordErrorMessage());
-            }
 
-            if (!passwordEncoder.matches(rq.getOldPassword(), user.getPassword())) {
+            if (!passwordEncoder.matches(rq.getOldPassword(), user.getPassword()))
                 return ResponseUtils.failure("EC_INVALID_PASSWORD", "Old password incorrect.");
-            }
 
             user.setPassword(passwordEncoder.encode(rq.getNewPassword()));
             updated = true;
         }
 
+        // -----------------------------
+        // EMAIL CHANGE (with verification)
+        // -----------------------------
         if (Utils.isNotEmpty(rq.getEmail()) &&
                 !rq.getEmail().equalsIgnoreCase(user.getEmail())) {
 
@@ -284,12 +318,14 @@ public class UserServiceImpl implements UserService {
                 return ResponseUtils.failure("EMAIL_ALREADY_IN_USE", "Email already registered.");
 
             emailService.initiateUserEmailChange(user, newEmail);
-
             userRepo.save(user);
 
             return ResponseUtils.success("Verification email sent for new email.");
         }
 
+        // -----------------------------
+        // SAVE IF CHANGED
+        // -----------------------------
         if (updated) {
             userRepo.save(user);
             return ResponseUtils.success("Profile updated successfully.");
@@ -297,6 +333,7 @@ public class UserServiceImpl implements UserService {
 
         return ResponseUtils.failure("NO_CHANGES", "No valid fields provided.");
     }
+
 
 
     // ===========================================================

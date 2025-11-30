@@ -1,18 +1,11 @@
 package com.one.aim.mapper;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import com.one.aim.bo.CartBO;
 import com.one.aim.bo.ProductBO;
-import com.one.aim.bo.SellerBO;
-import com.one.aim.bo.VendorBO;
-import com.one.aim.rs.CartMaxRs;
 import com.one.aim.rs.CartRs;
 import com.one.aim.service.FileService;
-import com.one.utils.Utils;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -29,6 +22,7 @@ public class CartMapper {
         // Basic Cart Fields
         // ===============================
         rs.setId(bo.getId());
+        rs.setProductId(bo.getProduct().getId());
         rs.setPname(bo.getPname());
         rs.setPrice(bo.getPrice());
         rs.setQuantity(bo.getQuantity());
@@ -48,19 +42,30 @@ public class CartMapper {
                 rs.setCategory(product.getCategoryName());
             }
 
-            // default values (offer, returnDay) because not in ProductBO
+            // default values
             rs.setOffer(0);
             rs.setReturnDay(0);
 
             // ===============================
-            // Image URL from the FIRST Image
+            // Image URL
             // ===============================
             if (product.getImageFileIds() != null && !product.getImageFileIds().isEmpty()) {
 
                 Long imageId = product.getImageFileIds().get(0);
 
-                // URL generated from FileService or static path
                 rs.setImageUrl("/api/files/" + imageId + "/view");
+            }
+
+            // ===============================
+            // ACTIVE / INACTIVE LOGIC (NEW)
+            // ===============================
+            boolean available = product.isActive();
+            rs.setAvailable(available);
+
+            if (!available) {
+                rs.setMessage("This product is no longer available");
+            } else {
+                rs.setMessage(null);
             }
         }
 

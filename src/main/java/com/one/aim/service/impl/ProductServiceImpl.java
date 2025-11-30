@@ -33,9 +33,8 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import org.webjars.NotFoundException;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -47,7 +46,7 @@ public class ProductServiceImpl implements ProductService {
     private final FileService fileService;
     private final UserActivityService userActivityService;
     private final CategoryRepo  categoryRepo;
-    private final CartRepo cartRepo;
+    private final OrderItemBORepo orderItemBORepo;
     private final ProductImageRepo productImageRepo;
 
     @Value("${app.frontend.product.url}")
@@ -157,46 +156,56 @@ public class ProductServiceImpl implements ProductService {
 
             Long sellerId = AuthUtils.findLoggedInUser().getDocId();
             if (!bo.getSeller().getId().equals(sellerId)) {
-                return ResponseUtils.failure(ErrorCodes.EC_UNAUTHORIZED, "You cannot edit another seller's product");
+                return ResponseUtils.failure(ErrorCodes.EC_UNAUTHORIZED, "Unauthorized");
             }
 
-            // BASIC FIELDS
+            //  ALLOW ACTIVE-ONLY UPDATE
+            if (rq.getActive() != null &&
+                    rq.getName() == null &&
+                    rq.getDescription() == null &&
+                    rq.getPrice() == null &&
+                    rq.getStock() == null &&
+                    rq.getCategoryId() == null &&
+                    rq.getCustomCategoryName() == null)
+            {
+                bo.setActive(rq.getActive());
+                productRepo.save(bo);
+
+                return ResponseUtils.success("Product status updated");
+            }
+
+            // NORMAL UPDATE (FULL FIELDS)
             if (Utils.isNotEmpty(rq.getName())) bo.setName(rq.getName());
             if (Utils.isNotEmpty(rq.getDescription())) bo.setDescription(rq.getDescription());
             if (rq.getPrice() != null) bo.setPrice(rq.getPrice());
             if (rq.getStock() != null) bo.setStock(rq.getStock());
 
-            // CATEGORY UPDATE
+            // Category
             if (rq.getCategoryId() != null) {
-
                 CategoryBO category = categoryRepo.findById(rq.getCategoryId()).orElse(null);
-
                 if (category == null) {
                     return ResponseUtils.failure(ErrorCodes.EC_RECORD_NOT_FOUND, "Category not found");
                 }
-
                 bo.setCategoryId(category.getId());
                 bo.setCategoryName(category.getName());
             }
-            else if (Utils.isNotEmpty(rq.getCustomCategoryName())) {
 
+            // custom category
+            if (Utils.isNotEmpty(rq.getCustomCategoryName())) {
                 bo.setCategoryId(null);
                 bo.setCategoryName(rq.getCustomCategoryName());
             }
 
             productRepo.save(bo);
 
-            userActivityService.log(sellerId,"PRODUCT_UPDATED","Updated product: " + bo.getName());
+            return ResponseUtils.success("Product updated");
 
-            ProductRs rs = ProductMapper.mapToProductRs(bo, fileService);
-            return ResponseUtils.success(new ProductDataRs("Product updated successfully", rs));
-
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             log.error("updateProduct() failed", e);
             return ResponseUtils.failure(ErrorCodes.EC_INTERNAL_ERROR, e.getMessage());
         }
     }
+
 
 
 
@@ -393,9 +402,6 @@ public class ProductServiceImpl implements ProductService {
 
 
 
-    // ===========================================================
-    // PUBLIC LISTING / SEARCH (NO SELLER VALIDATION)
-    // ===========================================================
     @Override
     public BaseRs listProducts(int offset, int limit) {
 
@@ -407,7 +413,8 @@ public class ProductServiceImpl implements ProductService {
 
             Pageable pageable = PageRequest.of(page, limit);
 
-            Page<ProductBO> pageData = productRepo.findAll(pageable);
+            // ONLY ACTIVE PRODUCTS
+            Page<ProductBO> pageData = productRepo.findByActiveTrue(pageable);
 
             List<ProductRs> rsList =
                     ProductMapper.mapToProductRsList(pageData.getContent(), fileService);
@@ -416,12 +423,12 @@ public class ProductServiceImpl implements ProductService {
                     new ProductDataRsList("Products retrieved successfully", rsList)
             );
 
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             log.error("listProducts() failed", e);
             return ResponseUtils.failure(ErrorCodes.EC_INTERNAL_ERROR, e.getMessage());
         }
     }
+
 
 
 
@@ -475,11 +482,31 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public BaseRs listSellerProducts() {
+    public BaseRs listSellerProducts(boolean showInactive) {
         Long sellerId = AuthUtils.findLoggedInUser().getDocId();
-        List<ProductBO> products = productRepo.findBySellerId(sellerId);
+
+        List<ProductBO> products;
+
+        if (showInactive) {
+            // return all (active + inactive)
+            products = productRepo.findBySellerId(sellerId);
+        } else {
+            // return only active
+            products = productRepo.findBySellerId(sellerId)
+                    .stream()
+                    .filter(ProductBO::isActive)
+                    .collect(Collectors.toList());
+        }
+
+        for (ProductBO p : products) {
+            Integer sold = orderItemBORepo.countProductSales(p.getId());
+            p.setSoldItem(sold == null ? 0 : sold);
+        }
+
         return ResponseUtils.success(products);
     }
+
+
 
 
 

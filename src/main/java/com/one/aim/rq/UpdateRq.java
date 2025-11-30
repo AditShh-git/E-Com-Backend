@@ -23,6 +23,8 @@ public class UpdateRq {
     private String email;
     private MultipartFile image;
 
+    private Boolean removeImage = false;
+
     // ===========================================================
     // Helper: Check if user is trying to update password
     // ===========================================================

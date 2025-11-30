@@ -87,12 +87,23 @@ public class ProductController {
     // ===========================================================
 // LIST PRODUCTS (SELLER ONLY)
 // ===========================================================
+//    @PreAuthorize("hasAuthority('SELLER')")
+//    @GetMapping("/list")
+//    public ResponseEntity<BaseRs> listMyProducts() throws Exception {
+//        log.debug("Executing RESTfulService [GET /api/seller/product/list]");
+//        BaseRs response = productService.listSellerProducts();
+//        return ResponseEntity.ok(response);
+//    }
+
     @PreAuthorize("hasAuthority('SELLER')")
     @GetMapping("/list")
-    public ResponseEntity<BaseRs> listMyProducts() throws Exception {
+    public ResponseEntity<BaseRs> listMyProducts(
+            @RequestParam(defaultValue = "false") boolean showInactive
+    ) throws Exception {
         log.debug("Executing RESTfulService [GET /api/seller/product/list]");
-        BaseRs response = productService.listSellerProducts();
+        BaseRs response = productService.listSellerProducts(showInactive);
         return ResponseEntity.ok(response);
     }
+
 
 }

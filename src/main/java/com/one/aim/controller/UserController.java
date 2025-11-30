@@ -82,6 +82,7 @@ public class UserController {
             @RequestParam(required = false) String oldPassword,
             @RequestParam(required = false) String newPassword,
             @RequestParam(required = false) String confirmPassword,
+            @RequestParam(required = false) Boolean removeImage,
             @RequestParam(required = false) MultipartFile image
     ) throws Exception {
 
@@ -95,6 +96,7 @@ public class UserController {
         rq.setNewPassword(newPassword);
         rq.setConfirmPassword(confirmPassword);
         rq.setImage(image);
+        rq.setRemoveImage(removeImage != null && removeImage);
 
         String loggedEmail = SecurityContextHolder.getContext().getAuthentication().getName();
 

@@ -16,6 +16,7 @@ public class CartRs implements Serializable {
 	private static final long serialVersionUID = 1L;
 
     private Long id;
+    private Long productId;
     private String pname;
     private String description;
     private long price;
@@ -24,6 +25,9 @@ public class CartRs implements Serializable {
 
     private int offer;
     private int returnDay;
+
+    private Boolean available;
+    private String message;
 
     private int quantity; // user-selected qty
 

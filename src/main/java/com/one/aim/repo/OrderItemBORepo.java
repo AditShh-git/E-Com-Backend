@@ -229,6 +229,10 @@ public interface OrderItemBORepo extends JpaRepository<OrderItemBO, Long> {
                                                @Param("start") LocalDateTime start,
                                                @Param("end") LocalDateTime end);
 
+    @Query("SELECT COALESCE(SUM(oi.quantity), 0) FROM OrderItemBO oi WHERE oi.product.id = :productId")
+    Integer countProductSales(@Param("productId") Long productId);
+
+
 
 }
 

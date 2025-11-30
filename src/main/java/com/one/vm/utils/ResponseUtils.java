@@ -371,4 +371,18 @@ public class ResponseUtils {
 		}
 		return errorRs;
 	}
+
+    public static <T> BaseRs successDirect(List<T> list) {
+        BaseRs rs = new BaseRs();
+        rs.setStatus("SUCCESS");
+
+        BaseDataRs data = new BaseDataRs();
+        data.setData(list);
+
+        rs.setData(data);
+        return rs;
+    }
+
+
+
 }

@@ -339,6 +339,31 @@ public class FileServiceImpl implements FileService {
         return fileBO;
     }
 
+    @Override
+    public void deleteFile(Long fileId) throws Exception {
+        if (fileId == null) return;
+
+        FileBO fileBO = fileRepo.findByIdAndEnabledIsTrue(fileId);
+        if (fileBO == null) return;
+
+        // mark disabled
+        fileBO.setEnabled(false);
+        fileRepo.save(fileBO);
+
+        // delete physical chunk files
+        try {
+            String folderPath = FileHelper.prepareChunksDir(fileBO.getPath());
+            File folder = new File(folderPath);
+            if (folder.exists()) {
+                for (File file : folder.listFiles()) {
+                    file.delete();
+                }
+                folder.delete();
+            }
+        } catch (Exception ignored) {}
+    }
+
+
 
 
 }

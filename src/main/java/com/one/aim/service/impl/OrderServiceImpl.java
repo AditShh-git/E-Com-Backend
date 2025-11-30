@@ -78,24 +78,31 @@ public class OrderServiceImpl implements OrderService {
             if (product == null)
                 throw new RuntimeException("Product missing in cart");
 
+            //  BLOCK checkout if product is inactive
+            if (!product.isActive()) {
+                return ResponseUtils.failure(
+                        "PRODUCT_INACTIVE",
+                        "Some items in your cart are no longer available."
+                );
+            }
+
             int available = product.getStock() == null ? 0 : product.getStock();
             int qty = cart.getQuantity() <= 0 ? 1 : cart.getQuantity();
 
             if (available < qty)
                 throw new RuntimeException("Insufficient stock for: " + product.getName());
 
-            // update stock
             product.setStock(available - qty);
             product.updateLowStock();
             productRepo.save(product);
 
-            // use latest product price
             long price = product.getPrice() == null ? 0L : product.getPrice().longValue();
             cart.setPrice(price);
             cartRepo.save(cart);
 
             totalAmount += price * qty;
         }
+
 
         // ------------------------------------------------------------
         // SELECT SHIPPING ADDRESS

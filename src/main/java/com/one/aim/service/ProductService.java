@@ -30,7 +30,6 @@ public interface ProductService {
 
     BaseRs searchProducts(String name, int offset, int limit) throws Exception;
 
-     BaseRs listSellerProducts();
-
+    public BaseRs listSellerProducts(boolean showInactive);
 
 }

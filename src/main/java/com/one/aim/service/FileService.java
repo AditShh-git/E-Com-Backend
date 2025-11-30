@@ -29,5 +29,8 @@ public interface FileService {
     // NEW
     FileBO getFile(String id) throws Exception;
 
+    void deleteFile(Long fileId) throws Exception;
+
+
 
 }

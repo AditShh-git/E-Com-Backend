@@ -6,6 +6,7 @@ import com.one.aim.rq.ResetPasswordRq;
 import com.one.aim.rq.UserRq;
 import com.one.aim.service.AuthService;
 import com.one.aim.service.UserService;
+import com.one.service.impl.UserDetailsImpl;
 import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 import lombok.RequiredArgsConstructor;
@@ -28,24 +29,43 @@ public class AuthController {
     private final AuthService authService;
     private final AuthenticationManager authenticationManager;
 
-    // ===========================================================
-    // LOGIN (User + Seller + Admin)
-    // ===========================================================
-    @PostMapping("/signin")
-    public ResponseEntity<BaseRs> signIn(@RequestBody LoginRq rq) {
+    @PostMapping("/user/signin")
+    public ResponseEntity<BaseRs> userSignIn(@RequestBody LoginRq rq) {
+        return doLogin(rq, "USER");
+    }
+
+    @PostMapping("/seller/signin")
+    public ResponseEntity<BaseRs> sellerSignIn(@RequestBody LoginRq rq) {
+        return doLogin(rq, "SELLER");
+    }
+
+    @PostMapping("/admin/signin")
+    public ResponseEntity<BaseRs> adminSignIn(@RequestBody LoginRq rq) {
+        return doLogin(rq, "ADMIN");
+    }
+
+    private ResponseEntity<BaseRs> doLogin(LoginRq rq, String requiredRole) {
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(rq.getEmail(), rq.getPassword())
             );
 
+            UserDetailsImpl user = (UserDetailsImpl) authentication.getPrincipal();
+
+            if (!user.getRole().equalsIgnoreCase(requiredRole)) {
+                return ResponseEntity.status(403)
+                        .body(ResponseUtils.failure("WRONG_ROLE",
+                                "This login page is only for " + requiredRole.toLowerCase() + "s"));
+            }
+
             return ResponseEntity.ok(authService.signIn(authentication));
 
         } catch (Exception e) {
-            log.error("Error in signIn(): {}", e.getMessage());
             return ResponseEntity.status(401)
                     .body(ResponseUtils.failure("INVALID_CREDENTIALS"));
         }
     }
+
 
     // ===========================================================
     // VERIFY EMAIL (User + Seller + Admin)

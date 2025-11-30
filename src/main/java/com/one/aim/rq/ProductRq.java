@@ -39,6 +39,9 @@ public class ProductRq extends BaseVM {
     private String customCategoryName;
     private String categoryName;
 
+    private Boolean active;
+
+
     //  Multiple images for upload
     private List<MultipartFile> images;
 }

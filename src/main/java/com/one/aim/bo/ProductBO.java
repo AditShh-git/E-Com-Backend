@@ -1,5 +1,6 @@
 package com.one.aim.bo;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
@@ -41,7 +42,7 @@ public class ProductBO {
     private boolean lowStock = false;
 
 
-    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id")
     private SellerBO seller;
@@ -57,6 +58,9 @@ public class ProductBO {
     private String categoryName;
 
     private Long categoryId;
+
+    @Transient
+    private Integer soldItem = 0;
 
 
     //  Unique slug or UUID for shareable links
