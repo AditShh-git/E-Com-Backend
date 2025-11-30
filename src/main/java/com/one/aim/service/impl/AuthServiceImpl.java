@@ -31,6 +31,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -197,6 +199,8 @@ public class AuthServiceImpl implements AuthService {
             return ResponseUtils.failure(ErrorCodes.EC_INVALID_TOKEN, "Invalid or expired token");
         }
 
+        Map<String, Object> map = new HashMap<>();
+
         if (userOpt.isPresent()) {
             UserBO user = userOpt.get();
             if (isExpired(user.getResetTokenExpiry())) {
@@ -206,6 +210,10 @@ public class AuthServiceImpl implements AuthService {
             user.setResetToken(null);
             user.setResetTokenExpiry(null);
             userRepo.save(user);
+
+            map.put("role", "USER");
+            map.put("message", "PASSWORD_RESET_SUCCESS");
+            return ResponseUtils.success(map);
 
         } else if (sellerOpt.isPresent()) {
             SellerBO seller = sellerOpt.get();
@@ -217,6 +225,10 @@ public class AuthServiceImpl implements AuthService {
             seller.setResetTokenExpiry(null);
             sellerRepo.save(seller);
 
+            map.put("role", "SELLER");
+            map.put("message", "PASSWORD_RESET_SUCCESS");
+            return ResponseUtils.success(map);
+
         } else {
             AdminBO admin = adminOpt.get();
             if (isExpired(admin.getResetTokenExpiry())) {
@@ -226,10 +238,14 @@ public class AuthServiceImpl implements AuthService {
             admin.setResetToken(null);
             admin.setResetTokenExpiry(null);
             adminRepo.save(admin);
-        }
 
-        return ResponseUtils.success("Password reset successfully");
+            map.put("role", "ADMIN");
+            map.put("message", "PASSWORD_RESET_SUCCESS");
+            return ResponseUtils.success(map);
+        }
     }
+
+
 
     private boolean isExpired(LocalDateTime expiry) {
         return expiry == null || expiry.isBefore(LocalDateTime.now());
@@ -305,7 +321,11 @@ public class AuthServiceImpl implements AuthService {
 
             userRepo.save(user);
 
-            return ResponseUtils.success("Email verified successfully.");
+            Map<String, Object> map = new HashMap<>();
+            map.put("role", "USER");
+            map.put("message", "EMAIL_VERIFIED_SUCCESS");
+            return ResponseUtils.success(map);
+
         }
 
         Optional<SellerBO> sellerOpt = sellerRepo.findByVerificationToken(token);
@@ -332,9 +352,11 @@ public class AuthServiceImpl implements AuthService {
 
             emailService.sendSellerUnderReviewEmail(seller.getEmail(), seller.getFullName());
 
-            return ResponseUtils.success(
-                    "Seller email verified. Admin approval required."
-            );
+            Map<String, Object> map = new HashMap<>();
+            map.put("role", "SELLER");
+            map.put("message", "EMAIL_VERIFIED_SUCCESS_SELLER_UNDER_REVIEW");
+            return ResponseUtils.success(map);
+
         }
 
         Optional<AdminBO> adminOpt = adminRepo.findByVerificationToken(token);
@@ -353,7 +375,11 @@ public class AuthServiceImpl implements AuthService {
 
             adminRepo.save(admin);
 
-            return ResponseUtils.success("Admin email verified successfully.");
+            Map<String, Object> map = new HashMap<>();
+            map.put("role", "ADMIN");
+            map.put("message", "EMAIL_VERIFIED_SUCCESS");
+            return ResponseUtils.success(map);
+
         }
 
         return ResponseUtils.failure(ErrorCodes.EC_USER_NOT_FOUND, "Invalid or expired verification token.");

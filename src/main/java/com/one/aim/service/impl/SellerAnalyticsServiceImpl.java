@@ -48,7 +48,10 @@ public class SellerAnalyticsServiceImpl implements SellerAnalyticsService {
         // B. Top selling products (last 30 days) — reusing existing repo method `findTopSelling`
         //    your findTopSelling(start,end,pageable) returns productId, productName, qty
         // --------------------
-        List<Object[]> topRows = orderItemRepo.findTopSelling(start, end, PageRequest.of(0, 5));
+        List<Object[]> topRows = orderItemRepo.findTopSellingBySeller(
+                sellerId, start, end, PageRequest.of(0, 5)
+        );
+
         List<TopProductChartVm> topProducts = topRows.stream()
                 .map(r -> {
                     // r[0] = productId (Long), r[1] = productName, r[2] = qty

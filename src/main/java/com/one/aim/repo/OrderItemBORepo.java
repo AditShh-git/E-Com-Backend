@@ -1,6 +1,7 @@
 package com.one.aim.repo;
 
 import com.one.aim.bo.OrderItemBO;
+import com.one.vm.analytics.TopProductVm;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -165,19 +166,19 @@ public interface OrderItemBORepo extends JpaRepository<OrderItemBO, Long> {
     );
 
 
-    @Query("""
-    SELECT oi.product.id, oi.productName, SUM(oi.quantity) AS qty
-    FROM OrderItemBO oi
-    WHERE oi.createdAt BETWEEN :start AND :end
-      AND oi.order.orderStatus = 'DELIVERED'
-    GROUP BY oi.product.id, oi.productName
-    ORDER BY qty DESC
-""")
-    List<Object[]> findTopSelling(
-            @Param("start") LocalDateTime start,
-            @Param("end") LocalDateTime end,
-            Pageable pageable
-    );
+//    @Query("""
+//    SELECT oi.product.id, oi.productName, SUM(oi.quantity) AS qty
+//    FROM OrderItemBO oi
+//    WHERE oi.createdAt BETWEEN :start AND :end
+//      AND oi.order.orderStatus = 'DELIVERED'
+//    GROUP BY oi.product.id, oi.productName
+//    ORDER BY qty DESC
+//""")
+//    List<Object[]> findTopSelling(
+//            @Param("start") LocalDateTime start,
+//            @Param("end") LocalDateTime end,
+//            Pageable pageable
+//    );
 
 
     @Query("""
@@ -231,6 +232,32 @@ public interface OrderItemBORepo extends JpaRepository<OrderItemBO, Long> {
 
     @Query("SELECT COALESCE(SUM(oi.quantity), 0) FROM OrderItemBO oi WHERE oi.product.id = :productId")
     Integer countProductSales(@Param("productId") Long productId);
+
+
+    @Query("""
+    SELECT p.id, p.name, SUM(oi.quantity)
+    FROM OrderItemBO oi
+    JOIN oi.product p
+    WHERE p.seller.id = :sellerId
+      AND oi.createdAt BETWEEN :start AND :end
+    GROUP BY p.id, p.name
+    ORDER BY SUM(oi.quantity) DESC
+""")
+    List<Object[]> findTopSellingBySeller(Long sellerId, LocalDateTime start, LocalDateTime end, Pageable pageable);
+
+
+
+    @Query("""
+    SELECT p.id, p.name, SUM(oi.quantity)
+    FROM OrderItemBO oi
+    JOIN oi.product p
+    WHERE oi.createdAt BETWEEN :start AND :end
+    GROUP BY p.id, p.name
+    ORDER BY SUM(oi.quantity) DESC
+""")
+    List<Object[]> findTopSelling(LocalDateTime start, LocalDateTime end, Pageable pageable);
+
+
 
 
 
