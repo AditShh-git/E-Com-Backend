@@ -58,4 +58,9 @@ public interface CartRepo extends JpaRepository<CartBO, Long> {
     void deleteByProductId(@Param("productId") Long productId);
 
 
+    void deleteByProduct_Id(Long productId);
+
+    List<CartBO> findAllByProduct_Id(Long productId);
+
+
 }

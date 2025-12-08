@@ -8,26 +8,47 @@ import java.util.List;
 
 public interface InvoiceService {
 
-    // USER: Full invoice (HTML preview)
+    // =====================================================
+    // USER + ADMIN: Full invoice (HTML preview)
+    // =====================================================
     String downloadInvoiceHtml(String orderId) throws Exception;
 
-    // SELLER: Simplified invoice (HTML preview)
-    String downloadSellerInvoiceHtml(String orderId, String sellerId) throws Exception;
+    // =====================================================
+    // SELLER: Seller-specific invoice (HTML preview)
+    // Only items belonging to sellerDbId
+    // =====================================================
+    String downloadSellerInvoiceHtml(String orderId, Long sellerDbId) throws Exception;
 
-    // USER / ADMIN: Download stored master PDF
+    // =====================================================
+    // USER + ADMIN: Stored master PDF
+    // =====================================================
     byte[] downloadInvoicePdf(String orderId) throws Exception;
 
-    // SELLER: Generate PDF dynamically from HTML
-    byte[] downloadSellerInvoicePdf(String orderId, String sellerId) throws Exception;
+    // =====================================================
+    // SELLER: Live-generated PDF (from filtered HTML)
+    // =====================================================
+    byte[] downloadSellerInvoicePdf(String orderId, Long sellerDbId) throws Exception;
 
-    // Create + store PDF invoice (User)
+    // =====================================================
+    // Create + Store master invoice PDF (for USER)
+    // Called once when order succeeds
+    // =====================================================
     InvoiceBO generateInvoice(String orderId) throws Exception;
 
-    // Fetch invoice using public orderId
+    // =====================================================
+    // Fetch invoice meta using public orderId
+    // =====================================================
     InvoiceBO getInvoiceByOrderId(String orderId);
 
-    // Lists
+    // =====================================================
+    // Listings (Panel/Pagination)
+    // =====================================================
     List<InvoiceBO> getAllInvoicesForAdmin();
+
     List<InvoiceBO> getInvoicesForUser(Long userId);
-    List<InvoiceBO> getInvoicesForSeller(String sellerId);
+
+    // SELLER using PK — most accurate
+    List<InvoiceBO> getInvoicesForSeller(Long sellerDbId);
+
+    byte[] downloadAdminInvoice(String orderId) throws Exception;
 }

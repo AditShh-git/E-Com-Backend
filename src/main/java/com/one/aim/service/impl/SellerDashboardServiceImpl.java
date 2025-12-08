@@ -1,10 +1,9 @@
 package com.one.aim.service.impl;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.*;
 
 import com.one.aim.bo.SellerBO;
+import com.one.aim.repo.ProductRepo;
 import com.one.aim.repo.SellerRepo;
 import com.one.aim.rs.SellerOverviewRs;
 import com.one.vm.analytics.TopProductVm;
@@ -27,6 +26,7 @@ public class SellerDashboardServiceImpl implements SellerDashboardService {
 
     private final OrderRepo orderRepo;
     private final SellerRepo sellerRepo;
+    private final ProductRepo  productRepo;
 
     @Override
     public BaseRs getSellerOverview() throws Exception {
@@ -50,6 +50,10 @@ public class SellerDashboardServiceImpl implements SellerDashboardService {
         // ----------------------------------
         Long totalOrders = orderRepo.getSellerOrderCount(sellerId);
         if (totalOrders == null) totalOrders = 0L;
+
+        Long totalProducts = productRepo.countProductsBySeller(sellerId);
+        if (totalProducts == null) totalProducts = 0L;
+
 
         // ----------------------------------
         // RECENT ORDERS
@@ -85,7 +89,7 @@ public class SellerDashboardServiceImpl implements SellerDashboardService {
         SellerOverviewRs.Stats stats = new SellerOverviewRs.Stats(
                 totalRevenue.doubleValue(),
                 totalOrders,
-                topProducts.size(),
+                Math.toIntExact(totalProducts),
                 4.8 // static rating
         );
 

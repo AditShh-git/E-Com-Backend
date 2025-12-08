@@ -65,14 +65,37 @@ public class CartServiceImpl implements CartService {
         ProductBO product = productRepo.findById(productId)
                 .orElseThrow(() -> new RuntimeException("Product not found"));
 
-        // Find active cart entry  UPDATED
+        // ========================
+        // STOCK CHECK
+        // ========================
+        if (product.getStock() == null || product.getStock() <= 0) {
+            return ResponseUtils.failure(
+                    ErrorCodes.OUT_OF_STOCK,
+                    "Product is out of stock"
+            );
+        }
+
         Optional<CartBO> existingOpt =
                 cartRepo.findByUserAddToCart_IdAndProduct_IdAndEnabled(userId, productId, true);
 
         if (existingOpt.isPresent()) {
+
             CartBO existing = existingOpt.get();
+
+            // Check stock before increasing quantity
+            if (existing.getQuantity() + 1 > product.getStock()) {
+                return ResponseUtils.failure(
+                        ErrorCodes.INSUFFICIENT_STOCK,
+                        "Only " + product.getStock() + " items available"
+                );
+            }
+
             existing.setQuantity(existing.getQuantity() + 1);
             cartRepo.save(existing);
+
+            // BONUS: Update product low-stock status
+            product.updateLowStock();
+            productRepo.save(product);
 
             return ResponseUtils.success(
                     new CartDataRs("Quantity updated",
@@ -80,12 +103,16 @@ public class CartServiceImpl implements CartService {
             );
         }
 
-        // Create new active cart entry
+        // ========================
+        // NEW ITEM ADD
+        // ========================
         CartBO cart = new CartBO();
         cart.setUserAddToCart(user);
         cart.setProduct(product);
         cart.setPname(product.getName());
-        cart.setPrice(product.getPrice() == null ? 0L : product.getPrice().longValue());
+        cart.setPrice(
+                product.getPrice() == null ? 0L : product.getPrice().longValue()
+        );
         cart.setQuantity(1);
         cart.setEnabled(true);
         cart.setSellerId(product.getSeller().getSellerId());
@@ -98,12 +125,16 @@ public class CartServiceImpl implements CartService {
                 "Added product ID: " + productId
         );
 
+        // BONUS: Update product low-stock status
+        product.updateLowStock();
+        productRepo.save(product);
 
         return ResponseUtils.success(
                 new CartDataRs("Added to cart",
                         CartMapper.mapToCartRs(cart, fileService))
         );
     }
+
 
     // ==========================================================
     // UPDATE QUANTITY

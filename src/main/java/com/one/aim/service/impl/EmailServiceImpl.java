@@ -219,6 +219,30 @@ public class EmailServiceImpl implements EmailService {
         }
     }
 
+    @Override
+    public void sendSellerRejectionEmail(String to, String name) {
+        try {
+            String subject = "Your Seller Application Has Been Rejected";
+
+            String body = """
+                    Hello %s,
+                    
+                    We regret to inform you that your seller application has been rejected.
+                    This may be due to incorrect or incomplete document verification.
+                    
+                    You can apply again after correcting the issues.
+                    
+                    Regards,
+                    AIMDEV Team
+                    """.formatted(name);
+
+            sendHtmlEmail(to, subject, body);
+
+        } catch (Exception e) {
+            log.error("Failed to send rejection email: {}", e.getMessage());
+        }
+    }
+
     private void sendHtmlEmail(String to, String subject, String htmlContent) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");

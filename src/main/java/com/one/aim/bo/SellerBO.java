@@ -77,6 +77,9 @@ public class SellerBO {
     @Builder.Default
     private boolean locked = true;
 
+    @Builder.Default
+    private boolean rejected = false;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

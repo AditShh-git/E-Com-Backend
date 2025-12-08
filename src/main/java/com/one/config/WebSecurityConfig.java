@@ -207,8 +207,18 @@ public class WebSecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
+
         config.setAllowCredentials(true);
-        config.addAllowedOriginPattern("*");
+
+        // Allow Vercel frontend
+        config.addAllowedOriginPattern("https://*.vercel.app");
+
+        // Allow NGROK dynamic URLs
+        config.addAllowedOriginPattern("https://*.ngrok-free.dev");
+
+        // Allow localhost (for local testing)
+        config.addAllowedOriginPattern("http://localhost:*");
+
         config.addAllowedHeader("*");
         config.addAllowedMethod("*");
 
@@ -217,6 +227,7 @@ public class WebSecurityConfig {
 
         return source;
     }
+
 
 
 

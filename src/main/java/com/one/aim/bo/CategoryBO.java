@@ -36,4 +36,9 @@ public class CategoryBO {
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
+    private Double taxPercent;
+    private Double deliveryCharge;
+    private Integer returnPolicyDays;
+
 }

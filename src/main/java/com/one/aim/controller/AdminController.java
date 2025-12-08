@@ -13,6 +13,7 @@ import com.one.aim.rs.AdminInvoiceRs;
 import com.one.aim.rs.InvoiceRs;
 import com.one.aim.service.AuthService;
 import com.one.aim.service.InvoiceService;
+import com.one.aim.service.ProductService;
 import com.one.utils.AuthUtils;
 import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
@@ -45,7 +46,7 @@ public class AdminController {
 
     private final AdminService adminService;
     private final InvoiceService invoiceService;
-    private final FileRepo fileRepo;
+    private final ProductService productService;
 
     // ============================================================
     // CREATE ADMIN (REGISTER)
@@ -101,7 +102,7 @@ public class AdminController {
     // =====================================================================
     //  ADMIN → Get ALL invoices
     // =====================================================================
-    @GetMapping("invoice/all")
+    @GetMapping("/invoice/all")
     public List<AdminInvoiceRs> getAllInvoicesForAdmin() {
 
         String role = AuthUtils.findLoggedInUser().getRoll();
@@ -114,6 +115,17 @@ public class AdminController {
                 .stream()
                 .map(InvoiceMapper::toAdminDto)
                 .toList();
+    }
+
+    @PreAuthorize("hasAuthority('ADMIN')")
+    @GetMapping("/product/list")
+    public ResponseEntity<BaseRs> getAdminProductList(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction
+    ) throws Exception {
+        return ResponseEntity.ok(productService.listAdminProducts(page, size, sortBy, direction));
     }
 
 

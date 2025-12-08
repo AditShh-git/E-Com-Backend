@@ -72,6 +72,7 @@ public class SellerServiceImpl implements SellerService {
     private final FileService fileService;
     private final EmailService emailService;
     private final UserRepo userRepo;
+    private final AdminSettingService adminSettingService;
 
     // ===========================================================
     // SELLER SIGN-UP
@@ -79,6 +80,14 @@ public class SellerServiceImpl implements SellerService {
     @Override
     @Transactional
     public BaseRs saveSeller(SellerRq rq) throws Exception {
+
+        // -----------------------------------------
+        // CHECK: ADMIN DISABLED SELLER SIGNUP
+        // -----------------------------------------
+        if (!adminSettingService.getBooleanValue("feature_seller_applications", true)) {
+            return ResponseUtils.failure("SELLER_SIGNUP_DISABLED",
+                    "Seller registration is currently disabled by the admin.");
+        }
 
         // -----------------------------------------
         // VALIDATION
@@ -113,6 +122,25 @@ public class SellerServiceImpl implements SellerService {
         }
 
         // -----------------------------------------
+        // SELLER-ONLY UNIQUE CHECKS
+        // -----------------------------------------
+
+        // Aadhaar
+        if (rq.getAdhaar() != null && sellerRepo.existsByAdhaar(rq.getAdhaar())) {
+            return ResponseUtils.failure("AADHAAR_EXISTS", "Aadhaar number already used.");
+        }
+
+        // PAN
+        if (rq.getPanCard() != null && sellerRepo.existsByPanCard(rq.getPanCard())) {
+            return ResponseUtils.failure("PAN_EXISTS", "PAN card already used.");
+        }
+
+        // GST
+        if (rq.getGst() != null && sellerRepo.existsByGst(rq.getGst())) {
+            return ResponseUtils.failure("GST_EXISTS", "GST number already registered.");
+        }
+
+        // -----------------------------------------
         // CREATE SELLER OBJECT
         // -----------------------------------------
         SellerBO seller = new SellerBO();
@@ -137,9 +165,9 @@ public class SellerServiceImpl implements SellerService {
         }
 
         // -----------------------------------------
-        // EMAIL VERIFICATION (Centralized in EmailService)
+        // EMAIL VERIFICATION
         // -----------------------------------------
-        String token = TokenUtils.generateVerificationToken();  // new token
+        String token = TokenUtils.generateVerificationToken();
 
         seller.setVerificationToken(token);
         seller.setVerificationTokenExpiry(TokenUtils.generateExpiry());
@@ -149,22 +177,17 @@ public class SellerServiceImpl implements SellerService {
 
         sellerRepo.save(seller);
 
-        // -----------------------------------------
-        // SEND VERIFICATION EMAIL
-        // -----------------------------------------
         emailService.sendVerificationEmail(
                 seller.getEmail(),
                 seller.getFullName(),
                 seller.getVerificationToken()
         );
 
-        // -----------------------------------------
-        // RESPONSE
-        // -----------------------------------------
         return ResponseUtils.success(
                 new SellerDataRs(MessageCodes.MC_SAVED_SUCCESSFUL, SellerMapper.mapToSellerRs(seller))
         );
     }
+
 
 
 

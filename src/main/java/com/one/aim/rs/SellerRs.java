@@ -28,6 +28,7 @@ public class SellerRs implements Serializable {
     private String role;
     private String imageUrl;
     private boolean verified;
+    private boolean rejected;
     private boolean locked;
     private boolean emailVerified;
     private LocalDateTime createdAt;

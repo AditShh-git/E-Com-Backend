@@ -31,6 +31,7 @@ public class SellerMapper {
         rs.setPanCard(bo.getPanCard());
         rs.setRole(bo.getRole());
         rs.setVerified(bo.isVerified());
+        rs.setRejected(bo.isRejected());
         rs.setLocked(bo.isLocked());
         rs.setEmailVerified(bo.isEmailVerified());
         rs.setCreatedAt(bo.getCreatedAt());

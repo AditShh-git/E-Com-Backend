@@ -65,6 +65,8 @@ public interface EmailService {
      */
     void sendSellerApprovalEmail(String toEmail, String fullName);
 
+    void sendSellerRejectionEmail(String to, String name);
+
     // ===========================================================
     // Verification Logic
     // ===========================================================

@@ -9,8 +9,11 @@ import com.one.aim.repo.SellerRepo;
 import com.one.aim.rq.LoginRq;
 import com.one.aim.rq.SellerFilterRequest;
 import com.one.aim.rs.InvoiceRs;
+import com.one.aim.rs.UserRs;
 import com.one.aim.service.InvoiceService;
+import com.one.aim.service.OrderService;
 import com.one.utils.AuthUtils;
+import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +43,7 @@ public class SellerController {
     private final SellerService sellerService;
     private final InvoiceService invoiceService;
     private final SellerRepo  sellerRepo;
+    private final OrderService  orderService;
 
     // ===========================================================
     // SELLER SIGN-UP (multipart/form-data)
@@ -91,29 +95,26 @@ public class SellerController {
     }
 
 
-    // =====================================================================
-    //  SELLER → Get all invoices containing seller's products
-    // =====================================================================
-    @GetMapping("/invoice/all")
+    // ==========================================================
+// SELLER → List all invoices containing their products
+// ==========================================================
+    @GetMapping("/seller/invoices")
     public List<InvoiceRs> getSellerInvoices() {
 
-        String role = AuthUtils.findLoggedInUser().getRoll();
-        Long sellerDbId = AuthUtils.findLoggedInUser().getDocId();
+        UserRs logged = AuthUtils.findLoggedInUser();
 
-        if (!"SELLER".equalsIgnoreCase(role)) {
-            throw new RuntimeException("Not allowed.");
+        if (!"SELLER".equalsIgnoreCase(logged.getRoll())) {
+            throw new RuntimeException("Not allowed");
         }
 
-        SellerBO seller = sellerRepo.findById(sellerDbId)
-                .orElseThrow(() -> new RuntimeException("Seller not found."));
+        Long sellerDbId = logged.getDocId();
 
-        String sellerUniqueId = seller.getSellerId();
-
-        return invoiceService.getInvoicesForSeller(sellerUniqueId)
+        return invoiceService.getInvoicesForSeller(sellerDbId)
                 .stream()
                 .map(InvoiceMapper::toDto)
                 .toList();
     }
+
 
     @PutMapping(value = "/profile/update", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> updateSellerProfile(
@@ -141,6 +142,17 @@ public class SellerController {
         rq.setImage(image);
 
         return ResponseEntity.ok(sellerService.updateSellerProfile(sellerEmail, rq));
+    }
+
+    @GetMapping("/orders")
+    public BaseRs getSellerOrders(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "orderTime") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction,
+            @RequestParam(required = false) String status
+    ) throws Exception {
+        return orderService.retrieveOrdersForSeller(page, size, sortBy, direction, status);
     }
 
 }

@@ -2,6 +2,8 @@ package com.one.aim.repo;
 
 import com.one.aim.bo.AddressBO;
 import com.one.aim.bo.OrderBO;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -310,6 +312,34 @@ public interface OrderRepo extends JpaRepository<OrderBO, Long> {
 """, nativeQuery = true)
     List<Object[]> getTopProducts(@Param("sellerId") Long sellerId);
 
+
+    List<OrderBO> findAllByOrderByOrderTimeDesc();
+
+    Page<OrderBO> findByOrderStatusIgnoreCase(String status, Pageable pageable);
+
+    @Query("""
+    SELECT DISTINCT o
+    FROM OrderBO o
+    JOIN o.orderItems oi
+    WHERE oi.sellerId = :sellerId
+    AND (:status IS NULL OR o.orderStatus = :status)
+""")
+    Page<OrderBO> findOrdersForSeller(
+            Long sellerId,
+            String status,
+            Pageable pageable
+    );
+
+
+
+    @Query("""
+    SELECT CASE WHEN COUNT(oi) > 0 THEN TRUE ELSE FALSE END
+    FROM OrderItemBO oi
+    WHERE oi.order.orderId = :orderId
+    AND oi.product.seller.id = :sellerId
+""")
+    boolean sellerOwnsOrder(@Param("orderId") String orderId,
+                            @Param("sellerId") Long sellerId);
 
 
 

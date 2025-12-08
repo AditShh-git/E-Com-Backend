@@ -6,15 +6,15 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 @Getter
 @Setter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 @Entity
 @Table(
         name = "orders",
@@ -35,6 +35,11 @@ public class OrderBO {
 
     @Column(name = "orderId", unique = true, nullable = false, updatable = false, length = 20)
     private String orderId;
+
+    private Long subTotal;
+    private Long taxAmount;
+    private Long deliveryCharge;
+    private Long discountAmount;
 
     private Long totalAmount;
     private LocalDateTime orderTime;
@@ -108,3 +113,5 @@ public class OrderBO {
         return sb.toString();
     }
 }
+
+

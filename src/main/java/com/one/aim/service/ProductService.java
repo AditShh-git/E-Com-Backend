@@ -32,4 +32,7 @@ public interface ProductService {
 
     public BaseRs listSellerProducts(boolean showInactive);
 
+    BaseRs listAdminProducts(int page, int size, String sortBy, String direction) throws Exception;
+
+
 }

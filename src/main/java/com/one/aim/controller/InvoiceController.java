@@ -3,6 +3,7 @@ package com.one.aim.controller;
 import com.itextpdf.html2pdf.HtmlConverter;
 import com.one.aim.bo.InvoiceBO;
 import com.one.aim.bo.OrderBO;
+import com.one.aim.bo.SellerBO;
 import com.one.aim.constants.ErrorCodes;
 import com.one.aim.repo.SellerRepo;
 import com.one.aim.rs.UserRs;
@@ -36,8 +37,9 @@ public class InvoiceController {
             String role = logged.getRoll();
             Long loggedUserDbId = logged.getDocId();
 
-            // 1. Load Invoice
+            //  Load Invoice Metadata
             InvoiceBO invoice = invoiceService.getInvoiceByOrderId(orderId);
+
             if (invoice == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ResponseUtils.failure(
@@ -46,15 +48,14 @@ public class InvoiceController {
                         ));
             }
 
-            OrderBO order = invoice.getOrder();
             byte[] pdfBytes;
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
 
             switch (role.toUpperCase()) {
 
-                // ==============================================
-                // USER → Only own invoice
-                // ==============================================
-                case "USER":
+                case "USER": {
+                    // Only own invoice
                     if (!invoice.getUser().getId().equals(loggedUserDbId)) {
                         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                                 .body(ResponseUtils.failure(
@@ -64,27 +65,26 @@ public class InvoiceController {
                     }
 
                     pdfBytes = invoiceService.downloadInvoicePdf(orderId);
+
+                    headers.setContentDisposition(
+                            ContentDisposition.attachment()
+                                    .filename("invoice-" + orderId + ".pdf")
+                                    .build()
+                    );
                     break;
+                }
 
-                // ==============================================
-                // SELLER → Only orders that belong to them
-                // ==============================================
-                case "SELLER":
+                case "SELLER": {
 
-                    String sellerStringId =
-                            sellerRepo.findById(loggedUserDbId)
-                                    .orElse(null)
-                                    .getSellerId();
+                    SellerBO seller = sellerRepo.findById(loggedUserDbId)
+                            .orElseThrow(() -> new RuntimeException("Seller not found"));
 
-                    boolean sellerMatch = order.getCartItems().stream()
-                            .anyMatch(ci ->
-                                    ci != null &&
-                                            ci.getProduct() != null &&
-                                            ci.getProduct().getSeller() != null &&
-                                            sellerStringId.equals(ci.getProduct().getSeller().getSellerId())
-                            );
+                    Long sellerDbId = seller.getId();
 
-                    if (!sellerMatch) {
+                    // Only invoice containing seller's products
+                    pdfBytes = invoiceService.downloadSellerInvoicePdf(orderId, sellerDbId);
+
+                    if (pdfBytes == null) {
                         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                                 .body(ResponseUtils.failure(
                                         ErrorCodes.EC_UNAUTHORIZED,
@@ -92,26 +92,26 @@ public class InvoiceController {
                                 ));
                     }
 
-                    pdfBytes = invoiceService.downloadSellerInvoicePdf(orderId, sellerStringId);
+                    headers.setContentDisposition(
+                            ContentDisposition.attachment()
+                                    .filename("invoice-" + orderId + "-SEL-" + sellerDbId + ".pdf")
+                                    .build()
+                    );
                     break;
+                }
 
-                // ==============================================
-                // ADMIN → Always regenerate fresh PDF with seller phone
-                // ==============================================
-                case "ADMIN":
-                    try {
-                        String htmlAdmin = invoiceService.downloadInvoiceHtml(orderId);
-                        ByteArrayOutputStream outAdmin = new ByteArrayOutputStream();
-                        HtmlConverter.convertToPdf(htmlAdmin, outAdmin);
-                        pdfBytes = outAdmin.toByteArray();
-                    } catch (Exception e) {
-                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                                .body(ResponseUtils.failure(
-                                        ErrorCodes.EC_INTERNAL_ERROR,
-                                        "Failed to generate admin invoice PDF"
-                                ));
-                    }
+                case "ADMIN": {
+
+                    // Regenerate full invoice fresh
+                    pdfBytes = invoiceService.downloadAdminInvoice(orderId);
+
+                    headers.setContentDisposition(
+                            ContentDisposition.attachment()
+                                    .filename("invoice-" + orderId + "-ADMIN.pdf")
+                                    .build()
+                    );
                     break;
+                }
 
                 default:
                     return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -121,20 +121,9 @@ public class InvoiceController {
                             ));
             }
 
-            // ==============================================
-            // RETURN PDF RESPONSE
-            // ==============================================
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            headers.setContentDisposition(
-                    ContentDisposition.attachment()
-                            .filename("invoice-" + orderId + ".pdf")
-                            .build()
-            );
-
             return ResponseEntity.ok().headers(headers).body(pdfBytes);
-        }
-        catch (Exception e) {
+
+        } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ResponseUtils.failure(
                             ErrorCodes.EC_INTERNAL_ERROR,
@@ -142,4 +131,6 @@ public class InvoiceController {
                     ));
         }
     }
+
+
 }

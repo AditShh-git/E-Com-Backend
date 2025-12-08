@@ -163,4 +163,11 @@ public class ErrorCodes {
     public static final String EC_INTERNAL_ERROR            = "EC_INTERNAL_ERROR";
     public static final String EC_UNKNOWN_ERROR             = "EC_UNKNOWN_ERROR";
 
+    public static final String OUT_OF_STOCK = "OUT_OF_STOCK";
+    public static final String INSUFFICIENT_STOCK = "INSUFFICIENT_STOCK";
+    public static final String EC_IMAGE_NOT_FOUND = "EC_IMAGE_NOT_FOUND";
+
+    public static final String EC_INTERNAL_SERVER_ERROR = "Internal server error";
+
+
 }

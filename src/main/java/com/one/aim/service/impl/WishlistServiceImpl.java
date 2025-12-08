@@ -7,6 +7,7 @@ import com.one.aim.bo.ProductBO;
 import com.one.aim.bo.WishlistBO;
 import com.one.aim.repo.ProductRepo;
 import com.one.aim.repo.WishlistRepo;
+import com.one.aim.service.AdminSettingService;
 import com.one.aim.service.CartService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,9 +39,18 @@ public class WishlistServiceImpl implements WishlistService {
     private final UserRepo userRepo;
     private final ProductRepo productRepo;
     private final CartService cartService;
+    private final AdminSettingService adminSettingService;
 
     @Override
     public BaseRs add(Long productId) {
+
+        // -----------------------------------------
+        // CHECK: ADMIN DISABLED WISHLIST FEATURE
+        // -----------------------------------------
+        if (!adminSettingService.getBooleanValue("feature_wishlist_enabled", true)) {
+            return ResponseUtils.failure("WISHLIST_DISABLED",
+                    "Wishlist feature is currently disabled by admin.");
+        }
 
         Long userId = AuthUtils.getLoggedUserId();
 
