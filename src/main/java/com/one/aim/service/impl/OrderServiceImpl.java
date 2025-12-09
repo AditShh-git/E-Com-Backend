@@ -217,15 +217,6 @@ public class OrderServiceImpl implements OrderService {
         // ------------------------------------------------------------
         invoiceService.generateInvoice(order.getOrderId());
 
-        // ------------------------------------------------------------
-        // ACTIVITY LOG + RESPONSE
-        // ------------------------------------------------------------
-        userActivityService.log(
-                userId,
-                "ORDER_PLACED",
-                "Order " + order.getOrderId() + " placed"
-        );
-
         Map<String, Object> response = new HashMap<>();
         response.put("orderId", order.getOrderId());
         response.put("subTotal", subTotal);
@@ -235,6 +226,15 @@ public class OrderServiceImpl implements OrderService {
         response.put("grandTotal", grandTotal);
         response.put("paymentMethod", pm);
         response.put("paymentStatus", order.getPaymentStatus());
+
+        userActivityService.log(
+                userId,
+                "ORDER_PLACED",
+                "Order " + order.getOrderId() + " placed"
+        );
+
+        sendOrderNotifications(order);
+
 
         return ResponseUtils.success(response);
     }
@@ -524,5 +524,55 @@ public class OrderServiceImpl implements OrderService {
 
         return (product == null) ? null : product.getSeller();
     }
+
+    private void sendOrderNotifications(OrderBO order) {
+
+        UserBO buyer = order.getUser();
+        OrderItemBO item = order.getOrderItems().get(0); // 1st product
+        ProductBO product = item.getProduct();
+        SellerBO seller = product.getSeller();
+
+        Long productImageId = null;
+        if (product.getImageFileIds() != null && !product.getImageFileIds().isEmpty()) {
+            productImageId = product.getImageFileIds().get(0);
+        }
+
+        String orderNo = order.getOrderId(); // <-- String ID
+        String orderRedirect = "/orders/" + orderNo;
+
+        // USER → Order Confirmed
+        notificationService.notifyUser(
+                buyer.getId(),
+                "ORDER_PLACED",
+                "Order Confirmed",
+                "Your order #" + orderNo + " has been placed successfully",
+                productImageId,
+                null,                    // no numeric ref ID
+                orderRedirect
+        );
+
+        // SELLER → New Order Received
+        notificationService.notifyUser(
+                seller.getId(),
+                "NEW_ORDER",
+                "New Order for " + product.getName(),
+                "Order received for product: " + product.getName(),
+                productImageId,
+                null,
+                "/seller/orders/" + orderNo
+        );
+
+        // ADMIN → Track new order
+        notificationService.notifyAdmins(
+                "ORDER_PLACED",
+                "New Order Created",
+                buyer.getFullName() + " bought " + product.getName(),
+                productImageId,
+                null,
+                "/admin/orders/" + orderNo
+        );
+    }
+
+
 
 }

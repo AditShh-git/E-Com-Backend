@@ -13,6 +13,7 @@ import com.one.aim.rs.ProductRs;
 import com.one.aim.rs.data.ProductDataRs;
 import com.one.aim.rs.data.ProductDataRsList;
 import com.one.aim.service.FileService;
+import com.one.aim.service.NotificationService;
 import com.one.aim.service.ProductService;
 import com.one.exception.BaseException;
 import com.one.utils.AuthUtils;
@@ -49,6 +50,7 @@ public class ProductServiceImpl implements ProductService {
     private final CategoryRepo  categoryRepo;
     private final OrderItemBORepo orderItemBORepo;
     private final CartRepo  cartRepo;
+    private final NotificationService  notificationService;
 
     @Value("${app.frontend.product.url}")
     private String productFrontUrl;
@@ -180,6 +182,16 @@ public class ProductServiceImpl implements ProductService {
                     "PRODUCT_CREATED",
                     "Created product: " + bo.getName()
             );
+
+            notificationService.notifyAdmins(
+                    "PRODUCT_ADDED",
+                    "New Product Uploaded",
+                    bo.getName(),
+                    bo.getImageFileIds().get(0),
+                    bo.getId(),
+                    "/admin/products/" + bo.getId()
+            );
+
 
             ProductRs rs = ProductMapper.mapToProductRs(bo, fileService);
             return ResponseUtils.success(
@@ -373,6 +385,16 @@ public class ProductServiceImpl implements ProductService {
                             });
                 }
             }
+
+            notificationService.notifyAdmins(
+                    "PRODUCT_UPDATED",
+                    "Product Updated",
+                    product.getName(),
+                    product.getImageFileIds().get(0),
+                    product.getId(),
+                    "/admin/products/" + product.getId()
+            );
+
 
             // =====================================================================
             // RESPONSE WITH UPDATED PRODUCT DATA

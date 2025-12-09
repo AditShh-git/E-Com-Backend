@@ -26,10 +26,11 @@ public interface FileService {
 
     FileBO uploadBytes(byte[] data, String filename) throws IOException;
 
-    // NEW
     FileBO getFile(String id) throws Exception;
 
     void deleteFile(Long fileId) throws Exception;
+
+    String getPublicFileUrl(Long fileId);
 
 
 

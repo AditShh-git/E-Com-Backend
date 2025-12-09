@@ -15,8 +15,7 @@ import com.one.aim.rq.SellerFilterRequest;
 import com.one.aim.rq.UpdateRq;
 import com.one.aim.rs.SellerPageResponse;
 import com.one.aim.rs.data.*;
-import com.one.aim.service.AdminSettingService;
-import com.one.aim.service.EmailService;
+import com.one.aim.service.*;
 import com.one.exception.AppException;
 import com.one.security.jwt.JwtUtils;
 import com.one.service.impl.UserDetailsImpl;
@@ -49,8 +48,6 @@ import com.one.aim.rq.SellerRq;
 import com.one.aim.rs.AdminRs;
 import com.one.aim.rs.CartRs;
 import com.one.aim.rs.SellerRs;
-import com.one.aim.service.FileService;
-import com.one.aim.service.SellerService;
 import com.one.constants.StringConstants;
 import com.one.utils.AuthUtils;
 import com.one.utils.Utils;
@@ -73,6 +70,7 @@ public class SellerServiceImpl implements SellerService {
     private final EmailService emailService;
     private final UserRepo userRepo;
     private final AdminSettingService adminSettingService;
+    private final NotificationService notificationService;
 
     // ===========================================================
     // SELLER SIGN-UP
@@ -176,6 +174,17 @@ public class SellerServiceImpl implements SellerService {
         seller.setLocked(true);
 
         sellerRepo.save(seller);
+
+        notificationService.notifyAdmins(
+                "SELLER_REGISTERED",
+                "New Seller Registered",
+                seller.getFullName() + " (" + seller.getEmail() + ")",
+                seller.getImageFileId(),
+                seller.getId(),
+                "/admin/sellers/" + seller.getId()
+        );
+
+
 
         emailService.sendVerificationEmail(
                 seller.getEmail(),

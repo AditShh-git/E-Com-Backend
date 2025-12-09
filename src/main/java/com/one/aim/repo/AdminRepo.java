@@ -12,6 +12,8 @@ public interface AdminRepo extends JpaRepository<AdminBO, Long> {
     // Login by email
     Optional<AdminBO> findByEmail(String email);
 
+
+
     // Lookup by full name
     Optional<AdminBO> findByFullName(String fullName);
 

@@ -9,11 +9,10 @@ import com.one.aim.repo.AdminRepo;
 import com.one.aim.repo.FileRepo;
 import com.one.aim.repo.InvoiceRepo;
 import com.one.aim.rq.LoginRq;
+import com.one.aim.rq.SaleAnnouncementRq;
 import com.one.aim.rs.AdminInvoiceRs;
 import com.one.aim.rs.InvoiceRs;
-import com.one.aim.service.AuthService;
-import com.one.aim.service.InvoiceService;
-import com.one.aim.service.ProductService;
+import com.one.aim.service.*;
 import com.one.utils.AuthUtils;
 import com.one.vm.core.BaseRs;
 import com.one.vm.utils.ResponseUtils;
@@ -29,7 +28,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.one.aim.rq.AdminRq;
-import com.one.aim.service.AdminService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -47,6 +45,7 @@ public class AdminController {
     private final AdminService adminService;
     private final InvoiceService invoiceService;
     private final ProductService productService;
+    private final NotificationService notificationService;
 
     // ============================================================
     // CREATE ADMIN (REGISTER)
@@ -128,6 +127,55 @@ public class AdminController {
         return ResponseEntity.ok(productService.listAdminProducts(page, size, sortBy, direction));
     }
 
+    @PostMapping("/send/users-notification")
+    public ResponseEntity<?> notifyAllUsers(@RequestBody SaleAnnouncementRq rq) {
 
+        if (rq.getTitle() == null || rq.getDescription() == null) {
+            return ResponseEntity.badRequest().body("Title & Description required");
+        }
+
+        notificationService.notifyAllUsers(
+                "SALE",
+                rq.getTitle(),
+                rq.getDescription(),
+                rq.getImageFileId(),
+                null,
+                "/sale"
+        );
+
+        return ResponseEntity.ok("Sale announcement sent to all users");
+    }
+
+    // Send notification to all SELLERS
+    @PostMapping("/send/sellers-notification")
+    public ResponseEntity<?> notifyAllSellers(@RequestBody SaleAnnouncementRq rq) {
+
+        notificationService.notifyAllSellers(
+                "SELLER_ALERT",
+                rq.getTitle(),
+                rq.getDescription(),
+                rq.getImageFileId(),
+                null,
+                "/seller/dashboard"
+        );
+
+        return ResponseEntity.ok("Alert sent to all sellers");
+    }
+
+    // Broadcast to EVERYONE
+    @PostMapping("/broadcast")
+    public ResponseEntity<?> broadcast(@RequestBody SaleAnnouncementRq rq) {
+
+        notificationService.notifyBroadcast(
+                "SYSTEM",
+                rq.getTitle(),
+                rq.getDescription(),
+                rq.getImageFileId(),
+                null,
+                "/"
+        );
+
+        return ResponseEntity.ok("Broadcast sent to all users & sellers");
+    }
 
 }

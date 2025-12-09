@@ -1,21 +1,22 @@
 package com.one.aim.controller;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
+import com.one.aim.mapper.NotificationMapper;
+import com.one.aim.rs.NotificationRS;
+import com.one.aim.service.FileService;
+import com.one.utils.AuthUtils;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.one.aim.bo.NotificationBO;
-import com.one.aim.rq.NotificationRq;
 import com.one.aim.service.NotificationService;
-import com.one.vm.core.BaseDataRs;
-import com.one.vm.core.BaseErrorRs;
-import com.one.vm.core.BaseRs;
 
 import lombok.RequiredArgsConstructor;
 
@@ -23,146 +24,60 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/notifications")
 @RequiredArgsConstructor
 public class NotificationController {
-		
-	 private final NotificationService notificationService;
 
-	    /**
-	     *  Send Notification
-	     */
-	    @PostMapping("/send")
-	    public BaseRs sendNotification(@RequestBody NotificationRq req) {
-	        try {
-	            NotificationBO bo = notificationService.send(
-	                    req.getReceiverId(),
-	                    req.getRole(),
-	                    req.getTitle(),
-	                    req.getMessage()
-	            );
+    private final NotificationService notificationService;
+    private final FileService fileService;
 
-	            BaseRs rs = new BaseRs();
-	            rs.setStatus("SUCCESS");
-	            rs.setData(new BaseDataRs("Notification sent successfully", bo));
-	            return rs;
+    // ============================================================
+    // Bell icon → only unread notifications
+    // ============================================================
+    @GetMapping("/me")
+    @PreAuthorize("hasAuthority('USER') or hasAuthority('SELLER') or hasAuthority('ADMIN')")
+    public ResponseEntity<?> myUnread() {
 
-	        } catch (Exception e) {
-	            BaseErrorRs err = new BaseErrorRs();
-	            err.setCode("500");
-	            err.setMessage("Failed to send notification: " + e.getMessage());
+        Long userId = AuthUtils.getLoggedUserId();
 
-	            BaseRs rs = new BaseRs();
-	            rs.setStatus("FAILURE");
-	            rs.setError(err);
-	            return rs;
-	        }
-	    }
+        var list = notificationService.getUnreadForUser(userId).stream()
+                .map(status -> NotificationMapper.map(status.getEvent(), status, fileService))
+                .toList();
 
-	    /**
-	     *  Get All Notifications of a User
-	     */
-	    @GetMapping("/{receiverId}/all")
-	    public BaseRs getAllNotifications(@PathVariable String receiverId) {
-	        try {
-	            List<NotificationBO> list = notificationService.getAllNotifications(receiverId);
+        if (list.isEmpty()) {
+            return ResponseEntity.ok(Map.of("message", "You have no new notifications"));
+        }
 
-	            BaseRs rs = new BaseRs();
-	            rs.setStatus("SUCCESS");
-	            rs.setData(new BaseDataRs("All notifications fetched", list));
-	            return rs;
+        return ResponseEntity.ok(list);
+    }
 
-	        } catch (Exception e) {
-	            BaseErrorRs err = new BaseErrorRs();
-	            err.setCode("500");
-	            err.setMessage("Failed to fetch notifications: " + e.getMessage());
 
-	            BaseRs rs = new BaseRs();
-	            rs.setStatus("FAILURE");
-	            rs.setError(err);
-	            return rs;
-	        }
-	    }
 
-	    /**
-	     *  Get Only Unread Notifications
-	     */
-	    @GetMapping("/{receiverId}/unread")
-	    public BaseRs getUnreadNotifications(@PathVariable String receiverId) {
-	        try {
-	            List<NotificationBO> list = notificationService.getUnreadNotifications(receiverId);
+    // ============================================================
+    // Notification list page → read + unread
+    // ============================================================
+    @GetMapping("/me/all")
+    @PreAuthorize("hasAuthority('USER') or hasAuthority('SELLER') or hasAuthority('ADMIN')")
+    public ResponseEntity<?> myAll() {
 
-	            BaseRs rs = new BaseRs();
-	            rs.setStatus("SUCCESS");
-	            rs.setData(new BaseDataRs("Unread notifications fetched", list));
-	            return rs;
+        Long userId = AuthUtils.getLoggedUserId();
 
-	        } catch (Exception e) {
-	            BaseErrorRs err = new BaseErrorRs();
-	            err.setCode("500");
-	            err.setMessage("Failed to fetch unread notifications: " + e.getMessage());
+        var list = notificationService.getAllForUser(userId).stream()
+                .map(status -> NotificationMapper.map(status.getEvent(), status, fileService))
+                .toList();
 
-	            BaseRs rs = new BaseRs();
-	            rs.setStatus("FAILURE");
-	            rs.setError(err);
-	            return rs;
-	        }
-	    }
+        if (list.isEmpty()) {
+            return ResponseEntity.ok(Map.of("message", "No notifications found"));
+        }
 
-	    /**
-	     *  Get Unread Count for Navbar Badge
-	     */
-	    @GetMapping("/{receiverId}/unread-count")
-	    public BaseRs getUnreadCount(@PathVariable String receiverId) {
-	        try {
-	            long count = notificationService.getUnreadCount(receiverId);
+        return ResponseEntity.ok(list);
+    }
 
-	            BaseRs rs = new BaseRs();
-	            rs.setStatus("SUCCESS");
-	            rs.setData(new BaseDataRs("Unread count fetched", count));
-	            return rs;
 
-	        } catch (Exception e) {
-	            BaseErrorRs err = new BaseErrorRs();
-	            err.setCode("500");
-	            err.setMessage("Failed to fetch unread count: " + e.getMessage());
 
-	            BaseRs rs = new BaseRs();
-	            rs.setStatus("FAILURE");
-	            rs.setError(err);
-	            return rs;
-	        }
-	    }
-
-	    /**
-	     *  Mark a Notification as Read
-	     */
-	    @PutMapping("/{id}/read")
-	    public BaseRs markAsRead(@PathVariable Long id) {
-	        try {
-	            notificationService.markAsRead(id);
-
-	            BaseRs rs = new BaseRs();
-	            rs.setStatus("SUCCESS");
-	            rs.setData(new BaseDataRs("Notification marked as read"));
-	            return rs;
-
-	        } catch (IllegalArgumentException iae) {
-	            BaseErrorRs err = new BaseErrorRs();
-	            err.setCode("404");
-	            err.setMessage(iae.getMessage());
-
-	            BaseRs rs = new BaseRs();
-	            rs.setStatus("FAILURE");
-	            rs.setError(err);
-	            return rs;
-
-	        } catch (Exception e) {
-	            BaseErrorRs err = new BaseErrorRs();
-	            err.setCode("500");
-	            err.setMessage("Failed to mark notification as read: " + e.getMessage());
-
-	            BaseRs rs = new BaseRs();
-	            rs.setStatus("FAILURE");
-	            rs.setError(err);
-	            return rs;
-	        }
-	    }
+    // ============================================================
+    // Mark notification as read (status row id)
+    // ============================================================
+    @PutMapping("/{statusId}/read")
+    public ResponseEntity<?> markRead(@PathVariable Long statusId) {
+        notificationService.markAsRead(statusId);
+        return ResponseEntity.ok("Marked as read");
+    }
 }

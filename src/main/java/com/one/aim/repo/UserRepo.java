@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 import com.one.aim.bo.UserBO;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Repository

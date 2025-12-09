@@ -1,30 +1,71 @@
 package com.one.aim.service;
 
+import com.one.aim.bo.NotificationUserStatusBO;
+
 import java.util.List;
 
-import com.one.aim.bo.NotificationBO;
+//import com.one.aim.bo.NotificationBO;
 
 public interface NotificationService {
-	
-    // Send notification
-    NotificationBO send(String receiverId, String role, String title, String message);
 
-    // Get ALL notifications of a user
-    List<NotificationBO> getAllNotifications(String receiverId);
+    // Notify all Admins (System events)
+    void notifyAdmins(
+            String type,
+            String title,
+            String description,
+            Long imageFileId,
+            Long redirectRefId,
+            String redirectUrl
+    );
 
-    // Get only unread notifications
-    List<NotificationBO> getUnreadNotifications(String receiverId);
+    // Notify specific user (Order events)
+    void notifyUser(
+            Long userId,
+            String type,
+            String title,
+            String description,
+            Long imageFileId,
+            Long redirectRefId,
+            String redirectUrl
+    );
 
-    // Get unread count
-    long getUnreadCount(String receiverId);
+    // Notify all Users (Public Sale events)
+    void notifyAllUsers(
+            String type,
+            String title,
+            String description,
+            Long imageFileId,
+            Long redirectRefId,
+            String redirectUrl
+    );
 
-    // Mark a notification as read
-    void markAsRead(Long id);
+    // Notify all Sellers (Seller registration/approval events)
+    void notifyAllSellers(
+            String type,
+            String title,
+            String description,
+            Long imageFileId,
+            Long redirectRefId,
+            String redirectUrl
+    );
 
-    // Helper methods (optional)
-    void notifyAdmin(String title, String msg);
+    // Notify all (Users + Sellers)
+    void notifyBroadcast(
+            String type,
+            String title,
+            String description,
+            Long imageFileId,
+            Long redirectRefId,
+            String redirectUrl
+    );
 
-    void notifySeller(Long sellerId, String title, String msg);
 
-    void notifyUser(Long userId, String title, String msg);
+    // Fetch unread notifications for current user
+    List<NotificationUserStatusBO> getUnreadForUser(Long userId);
+
+    // Fetch full notification list for current user
+    List<NotificationUserStatusBO> getAllForUser(Long userId);
+
+    // Mark notification (status row) as read
+    void markAsRead(Long statusId);
 }

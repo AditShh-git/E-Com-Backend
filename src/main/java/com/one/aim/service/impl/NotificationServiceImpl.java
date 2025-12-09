@@ -1,11 +1,19 @@
 package com.one.aim.service.impl;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
+import com.one.aim.bo.*;
+import com.one.aim.controller.NotificationController;
+import com.one.aim.controller.NotificationWSController;
+import com.one.aim.mapper.NotificationMapper;
+import com.one.aim.repo.*;
+import com.one.aim.rs.NotificationRS;
+import com.one.aim.service.FileService;
 import org.springframework.stereotype.Service;
 
-import com.one.aim.bo.NotificationBO;
-import com.one.aim.repo.NotificationRepo;
+//import com.one.aim.bo.NotificationBO;
+//import com.one.aim.repo.NotificationRepo;
 import com.one.aim.service.NotificationService;
 import com.one.vm.utils.EmailUtil;
 
@@ -14,78 +22,189 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class NotificationServiceImpl implements NotificationService {
-	
-	 private final NotificationRepo notificationRepo;
-	    private final EmailUtil emailUtil;
 
-	    /**
-	     * Send Notification
-	     */
-	    @Override
-	    public NotificationBO send(String receiverId, String role, String title, String message) {
+    private final NotificationEventRepo eventRepo;
+    private final NotificationUserStatusRepo statusRepo;
+    private final UserRepo userRepo;
+    private final NotificationWSController wsController;
+    private final FileService fileService;
 
-	        NotificationBO obj = new NotificationBO();
-	        obj.setReceiverId(receiverId);
-	        obj.setRole(role);
-	        obj.setTitle(title);
-	        obj.setMessage(message);
+    private static final int MAX_VISIBLE_PER_USER = 20;
+    private static final int EXPIRY_DAYS = 30;
+    private final AdminRepo adminRepo;
+    private final SellerRepo sellerRepo;
 
-	        notificationRepo.save(obj);
+    // =====================================================
+    //                 SEND NOTIFICATIONS
+    // =====================================================
 
-	        // Send email notification
-	        emailUtil.sendEmail(receiverId, title, message);
+    @Override
+    public void notifyAdmins(String type, String title, String description,
+                             Long imageFileId, Long redirectRefId, String redirectUrl) {
 
-	        return obj;
-	    }
+        NotificationEventBO event = saveEvent(type, title, description,
+                imageFileId, redirectRefId, redirectUrl,
+                "ADMIN"
+        );
 
-	    /**
-	     * Get All Notifications
-	     */
-	    @Override
-	    public List<NotificationBO> getAllNotifications(String receiverId) {
-	        return notificationRepo.findByReceiverIdOrderByCreatedAtDesc(receiverId);
-	    }
+        List<AdminBO> admins = adminRepo.findAll();
 
-	    /**
-	     * Get Only Unread Notifications
-	     */
-	    @Override
-	    public List<NotificationBO> getUnreadNotifications(String receiverId) {
-	        return notificationRepo.findByReceiverIdAndIsReadFalseOrderByCreatedAtDesc(receiverId);
-	    }
+        admins.forEach(a -> {
+            NotificationUserStatusBO status = saveUserStatus(a.getId(), event);
+            wsController.sendToUserWS(a.getId(),
+                    NotificationMapper.map(event, status, fileService));
+        });
+    }
 
-	    /**
-	     * Get Unread Count
-	     */
-	    @Override
-	    public long getUnreadCount(String receiverId) {
-	        return notificationRepo.countByReceiverIdAndIsReadFalse(receiverId);
-	    }
+    @Override
+    public void notifyUser(Long userId, String type, String title, String description,
+                           Long imageFileId, Long redirectRefId, String redirectUrl) {
 
-	    /**
-	     * Mark as read
-	     */
-	    @Override
-	    public void markAsRead(Long id) {
-	        NotificationBO bo = notificationRepo.findById(id)
-	                .orElseThrow(() -> new RuntimeException("Notification not found"));
+        NotificationEventBO event = saveEvent(type, title, description,
+                imageFileId, redirectRefId, redirectUrl,
+                null // user-specific, not role-based
+        );
 
-	        bo.setRead(true);
-	        notificationRepo.save(bo);
-	    }
+        NotificationUserStatusBO status = saveUserStatus(userId, event);
 
-	    // Helper methods for auto notifications:
+        wsController.sendToUserWS(userId,
+                NotificationMapper.map(event, status, fileService));
+    }
 
-	    public void notifyAdmin(String title, String msg) {
-	        send("ADMIN", "ADMIN", title, msg);
-	    }
+    @Override
+    public void notifyAllUsers(String type, String title, String description,
+                               Long imageFileId, Long redirectRefId, String redirectUrl) {
 
-	    public void notifySeller(Long sellerId, String title, String msg) {
-	        send(sellerId.toString(), "SELLER", title, msg);
-	    }
+        NotificationEventBO event = saveEvent(type, title, description,
+                imageFileId, redirectRefId, redirectUrl,
+                "USER"
+        );
 
-	    public void notifyUser(Long userId, String title, String msg) {
-	        send(userId.toString(), "USER", title, msg);
-	    }
+        List<UserBO> users = userRepo.findAll();
 
+        users.forEach(u -> {
+            NotificationUserStatusBO status = saveUserStatus(u.getId(), event);
+            wsController.sendToUserWS(u.getId(),
+                    NotificationMapper.map(event, status, fileService));
+        });
+    }
+
+    @Override
+    public void notifyAllSellers(String type, String title, String description,
+                                 Long imageFileId, Long redirectRefId, String redirectUrl) {
+
+        NotificationEventBO event = saveEvent(type, title, description,
+                imageFileId, redirectRefId, redirectUrl,
+                "SELLER"
+        );
+
+        List<SellerBO> sellers = sellerRepo.findAll();
+
+        sellers.forEach(s -> {
+            NotificationUserStatusBO status = saveUserStatus(s.getId(), event);
+            wsController.sendToUserWS(s.getId(),
+                    NotificationMapper.map(event, status, fileService));
+        });
+    }
+
+    @Override
+    public void notifyBroadcast(String type, String title, String description,
+                                Long imageFileId, Long redirectRefId, String redirectUrl) {
+
+        NotificationEventBO event = saveEvent(type, title, description,
+                imageFileId, redirectRefId, redirectUrl,
+                "ALL"
+        );
+
+        List<UserBO> all = userRepo.findAll();
+
+        all.forEach(u -> {
+            NotificationUserStatusBO status = saveUserStatus(u.getId(), event);
+            wsController.sendToUserWS(u.getId(),
+                    NotificationMapper.map(event, status, fileService));
+        });
+    }
+
+
+    // =====================================================
+    //                 FETCH NOTIFICATIONS
+    // =====================================================
+
+    @Override
+    public List<NotificationUserStatusBO> getUnreadForUser(Long userId) {
+        return statusRepo
+                .findByUserIdAndIsReadFalseAndIsHiddenFalseOrderByCreatedAtDesc(userId);
+    }
+
+    @Override
+    public List<NotificationUserStatusBO> getAllForUser(Long userId) {
+        return statusRepo
+                .findByUserIdAndIsHiddenFalseOrderByCreatedAtDesc(userId);
+    }
+
+
+    // =====================================================
+    //                    MARK AS READ
+    // =====================================================
+
+    @Override
+    public void markAsRead(Long statusId) {
+        statusRepo.findById(statusId).ifPresent(s -> {
+            s.setIsRead(true);
+            s.setReadAt(LocalDateTime.now());
+            statusRepo.save(s);
+        });
+    }
+
+
+    // =====================================================
+    //            PRIVATE: SAVE EVENT + STATUS
+    // =====================================================
+
+    private NotificationEventBO saveEvent(String type, String title, String description,
+                                          Long imageFileId, Long redirectRefId,
+                                          String redirectUrl, String targetRole) {
+
+        NotificationEventBO event = NotificationEventBO.builder()
+                .type(type)
+                .title(title)
+                .description(description)
+                .imageFileId(imageFileId)
+                .redirectRefId(redirectRefId)
+                .redirectUrl(redirectUrl)
+                .targetRole(targetRole)
+                .expiryAt(LocalDateTime.now().plusDays(EXPIRY_DAYS))
+                .build();
+
+        return eventRepo.save(event);
+    }
+
+    private NotificationUserStatusBO saveUserStatus(Long userId, NotificationEventBO event) {
+
+        NotificationUserStatusBO status = NotificationUserStatusBO.builder()
+                .userId(userId)
+                .event(event)
+                .build();
+
+        NotificationUserStatusBO saved = statusRepo.save(status);
+
+        enforceUserRetention(userId);
+        return saved;
+    }
+
+
+    // =====================================================
+    //          RETENTION POLICY (Only Latest 20)
+    // =====================================================
+
+    private void enforceUserRetention(Long userId) {
+        List<NotificationUserStatusBO> all =
+                statusRepo.findByUserIdAndIsHiddenFalseOrderByCreatedAtDesc(userId);
+
+        if (all.size() > MAX_VISIBLE_PER_USER) {
+            all.subList(MAX_VISIBLE_PER_USER, all.size())
+                    .forEach(s -> s.setIsHidden(true));
+            statusRepo.saveAll(all);
+        }
+    }
 }
