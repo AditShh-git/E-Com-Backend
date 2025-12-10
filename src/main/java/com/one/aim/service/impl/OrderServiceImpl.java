@@ -32,6 +32,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+import static org.apache.commons.compress.utils.ArchiveUtils.sanitize;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -70,9 +72,6 @@ public class OrderServiceImpl implements OrderService {
             return ResponseUtils.failure("AUTH_REQUIRED", "User not authenticated");
         }
 
-        // ------------------------------------------------------------
-        // LOAD CART ITEMS
-        // ------------------------------------------------------------
         List<CartBO> cartItems = cartRepo.findAllByUserAddToCart_IdAndEnabled(userId, true);
         if (cartItems == null || cartItems.isEmpty()) {
             return ResponseUtils.failure("CART_EMPTY", "Your cart is empty.");
@@ -82,14 +81,12 @@ public class OrderServiceImpl implements OrderService {
         long totalTax = 0L;
         long totalShipping = 0L;
 
-        // Admin settings
-        boolean discountEnabled = adminSettingService.isDiscountEngineEnabled();
-        int globalDiscount = discountEnabled ? adminSettingService.getGlobalDiscount() : 0;
-        long freeShippingAbove = adminSettingService.getLongValue("free_shipping_min_order_amount", 999);
+        long freeShippingAbove =
+                adminSettingService.getLongValue("free_shipping_min_order_amount", 0);
 
-        // ------------------------------------------------------------
-        // STOCK VALIDATION + PRICE CALCULATION
-        // ------------------------------------------------------------
+        long discountPercent =
+                adminSettingService.getLongValue("global_discount_percent", 0);
+
         for (CartBO cart : cartItems) {
 
             ProductBO product = cart.getProduct();
@@ -99,7 +96,7 @@ public class OrderServiceImpl implements OrderService {
             }
 
             int qty = Math.max(cart.getQuantity(), 1);
-            int available = product.getStock() == null ? 0 : product.getStock();
+            int available = Optional.ofNullable(product.getStock()).orElse(0);
 
             if (available < qty) {
                 return ResponseUtils.failure("INSUFFICIENT_STOCK",
@@ -109,63 +106,55 @@ public class OrderServiceImpl implements OrderService {
             long linePrice = product.getPrice().longValue() * qty;
             subTotal += linePrice;
 
-            // Category-based TAX & SHIPPING
-            String category = product.getCategoryName().toLowerCase().replace(" ", "_");
+            String category = sanitize(product.getCategoryName());
 
-            double taxPercent = adminSettingService.getDoubleValue("tax_" + category, 0.0);
-            double shippingCharge = adminSettingService.getDoubleValue("shipping_" + category, 50.0);
+            double taxPercent = adminSettingService.getDoubleValue(
+                    "tax_" + category,
+                    adminSettingService.getDoubleValue("default_tax_percent", 0)
+            );
+
+            double shippingCharge = adminSettingService.getDoubleValue(
+                    "shipping_" + category,
+                    adminSettingService.getDoubleValue("delivery_charges_fixed", 0)
+            );
 
             totalTax += Math.round(linePrice * taxPercent / 100);
-            totalShipping += Math.round(shippingCharge);
+            totalShipping += Math.round(shippingCharge * qty);
 
-            // Stock update
             product.setStock(available - qty);
             product.updateLowStock();
             productRepo.save(product);
 
-            // Persist final price
             cart.setPrice(product.getPrice().longValue());
             cartRepo.save(cart);
         }
 
-        // ------------------------------------------------------------
-        // DISCOUNT
-        // ------------------------------------------------------------
-        long discountAmount = 0;
-        if (globalDiscount > 0) {
-            discountAmount = Math.round(subTotal * globalDiscount / 100);
-        }
+        long discountAmount = Math.round(subTotal * discountPercent / 100);
 
-        // ------------------------------------------------------------
-        // FREE SHIPPING RULE
-        // ------------------------------------------------------------
         if (subTotal >= freeShippingAbove) {
             totalShipping = 0;
         }
 
-        // ------------------------------------------------------------
-        // FINAL TOTAL
-        // ------------------------------------------------------------
-        long grandTotal = subTotal + totalTax + totalShipping - discountAmount;
+        // Payment gateway fee support (for Razorpay / card payments)
+        double pgFeePercent =
+                adminSettingService.getDoubleValue("payment_charge_percent", 0.0);
 
-        // ------------------------------------------------------------
-        // SHIPPING ADDRESS
-        // ------------------------------------------------------------
+        long pgFeeAmount = Math.round(subTotal * pgFeePercent / 100);
+
+        long grandTotal = subTotal + totalTax + totalShipping + pgFeeAmount - discountAmount;
+
         AddressBO shippingAddress = resolveShippingAddress(rq, userId);
-
-        // ------------------------------------------------------------
-        // CREATE ORDER
-        // ------------------------------------------------------------
         UserBO user = userRepo.findById(userId).orElseThrow();
 
-        OrderBO order = new OrderBO(); // orderId auto generated
+        OrderBO order = new OrderBO();
         order.setUser(user);
-        order.setOrderStatus("INITIAL");
         order.setOrderTime(LocalDateTime.now());
+        order.setOrderStatus("INITIAL");
         order.setSubTotal(subTotal);
         order.setTaxAmount(totalTax);
         order.setDeliveryCharge(totalShipping);
         order.setDiscountAmount(discountAmount);
+        order.setPaymentCharge(pgFeeAmount);
         order.setTotalAmount(grandTotal);
         order.setShippingAddress(shippingAddress);
 
@@ -173,23 +162,17 @@ public class OrderServiceImpl implements OrderService {
         order.setPaymentMethod(pm);
         order.setPaymentStatus(paymentStatusFromMethod(pm));
 
-        // Generate invoice number BEFORE save
-        String invoiceNo = adminSettingService.get("order_prefix")
-                + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+        order.setInvoiceno(
+                adminSettingService.get("order_prefix")
+                        + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"))
+        );
 
-        order.setInvoiceno(invoiceNo);
+        orderRepo.save(order);
 
-        orderRepo.save(order);  //  orderId auto-created here
-
-        // ------------------------------------------------------------
-        // ORDER ITEMS
-        // ------------------------------------------------------------
-        List<OrderItemBO> orderItemList = new ArrayList<>();
-
+        List<OrderItemBO> items = new ArrayList<>();
         for (CartBO cart : cartItems) {
             ProductBO product = cart.getProduct();
-
-            OrderItemBO item = OrderItemBO.builder()
+            items.add(OrderItemBO.builder()
                     .order(order)
                     .product(product)
                     .sellerId(product.getSeller().getId())
@@ -198,34 +181,16 @@ public class OrderServiceImpl implements OrderService {
                     .unitPrice(cart.getPrice())
                     .quantity(cart.getQuantity())
                     .totalPrice(cart.getPrice() * cart.getQuantity())
-                    .build();
-
-            orderItemList.add(item);
+                    .build());
         }
 
-        order.setOrderItems(orderItemList);
+        order.setOrderItems(items);
         orderRepo.save(order);
 
-        // ------------------------------------------------------------
-        // DISABLE CART ITEMS
-        // ------------------------------------------------------------
         cartItems.forEach(c -> c.setEnabled(false));
         cartRepo.saveAll(cartItems);
 
-        // ------------------------------------------------------------
-        // GENERATE & STORE INVOICE PDF
-        // ------------------------------------------------------------
         invoiceService.generateInvoice(order.getOrderId());
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("orderId", order.getOrderId());
-        response.put("subTotal", subTotal);
-        response.put("taxAmount", totalTax);
-        response.put("shipping", totalShipping);
-        response.put("discount", discountAmount);
-        response.put("grandTotal", grandTotal);
-        response.put("paymentMethod", pm);
-        response.put("paymentStatus", order.getPaymentStatus());
 
         userActivityService.log(
                 userId,
@@ -235,10 +200,18 @@ public class OrderServiceImpl implements OrderService {
 
         sendOrderNotifications(order);
 
-
-        return ResponseUtils.success(response);
+        return ResponseUtils.success(Map.of(
+                "orderId", order.getOrderId(),
+                "subTotal", subTotal,
+                "taxAmount", totalTax,
+                "shipping", totalShipping,
+                "discount", discountAmount,
+                "paymentCharge", pgFeeAmount,
+                "grandTotal", grandTotal,
+                "paymentMethod", pm,
+                "paymentStatus", order.getPaymentStatus()
+        ));
     }
-
 
 
 
@@ -461,25 +434,34 @@ public class OrderServiceImpl implements OrderService {
     }
 
 
-    private double getTaxPercent(ProductBO product) {
-        String cat = product.getCategoryName() == null ? "" : product.getCategoryName().toLowerCase();
-        return switch (cat) {
-            case "electronics" -> parseDoubleSafe("tax_electronics", 18);
-            case "fashion"     -> parseDoubleSafe("tax_fashion", 5);
-            case "grocery"     -> parseDoubleSafe("tax_grocery", 0);
-            default            -> parseDoubleSafe("default_tax_percent", 0);
-        };
+    private double getAdminValue(String key, double defaultValue) {
+        try {
+            String v = adminSettingService.get(key);
+            return (v == null || v.isBlank()) ? defaultValue : Double.parseDouble(v);
+        } catch (Exception e) {
+            return defaultValue;
+        }
     }
 
-    private double getDeliveryCharge(ProductBO product) {
-        String cat = product.getCategoryName() == null ? "" : product.getCategoryName().toLowerCase();
-        return switch (cat) {
-            case "electronics" -> parseDoubleSafe("shipping_electronics", 100);
-            case "fashion"     -> parseDoubleSafe("shipping_fashion", 50);
-            case "grocery"     -> parseDoubleSafe("shipping_grocery", 20);
-            default            -> parseDoubleSafe("delivery_charges_fixed", 50);
-        };
+    private double getTaxPercent(ProductBO product) {
+        String cat = Optional.ofNullable(product.getCategoryName())
+                .orElse("")
+                .toLowerCase()
+                .replace(" ", "_");
+
+        return getAdminValue("tax_" + cat,
+                getAdminValue("default_tax_percent", 0));
     }
+
+    private double getShippingCharge(ProductBO product) {
+        String cat = Optional.ofNullable(product.getCategoryName())
+                .orElse("")
+                .toLowerCase()
+                .replace(" ", "_");
+
+        return 0;
+    }
+
 
     private double parseDoubleSafe(String key, double defaultValue) {
         try {

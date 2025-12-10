@@ -37,11 +37,12 @@ public class OrderBO {
     private String orderId;
 
     private Long subTotal;
-    private Long taxAmount;
-    private Long deliveryCharge;
+    private Long taxAmount;              // category-based + default tax
+    private Long deliveryCharge;         // category-based + base shipping
     private Long discountAmount;
-
+    private Long paymentCharge;          //  added new
     private Long totalAmount;
+
     private LocalDateTime orderTime;
 
     private String orderStatus;     // INITIAL, CONFIRMED, SHIPPED, DELIVERED

@@ -4,20 +4,18 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.one.aim.bo.*;
-import com.one.aim.controller.NotificationController;
 import com.one.aim.controller.NotificationWSController;
 import com.one.aim.mapper.NotificationMapper;
 import com.one.aim.repo.*;
-import com.one.aim.rs.NotificationRS;
 import com.one.aim.service.FileService;
 import org.springframework.stereotype.Service;
 
 //import com.one.aim.bo.NotificationBO;
 //import com.one.aim.repo.NotificationRepo;
 import com.one.aim.service.NotificationService;
-import com.one.vm.utils.EmailUtil;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -28,7 +26,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final UserRepo userRepo;
     private final NotificationWSController wsController;
     private final FileService fileService;
-
+    private final NotificationUserStatusRepo userStatusRepo;
     private static final int MAX_VISIBLE_PER_USER = 20;
     private static final int EXPIRY_DAYS = 30;
     private final AdminRepo adminRepo;
@@ -155,6 +153,35 @@ public class NotificationServiceImpl implements NotificationService {
             statusRepo.save(s);
         });
     }
+
+    @Override
+    @Transactional
+    public void markAllAsRead(Long userId) {
+        List<NotificationUserStatusBO> unreadNotifs =
+                userStatusRepo.findByUserIdAndIsReadFalseAndIsHiddenFalseOrderByCreatedAtDesc(userId);
+
+        if (unreadNotifs.isEmpty()) {
+            return;
+        }
+
+        unreadNotifs.forEach(n -> n.setIsRead(true));
+        userStatusRepo.saveAll(unreadNotifs);
+    }
+
+    @Override
+    @Transactional
+    public void hideNotification(Long statusId, Long userId) {
+        var status = userStatusRepo.findById(statusId)
+                .orElseThrow(() -> new RuntimeException("Notification not found"));
+
+        if (!status.getUserId().equals(userId)) {
+            throw new RuntimeException("Unauthorized delete attempt");
+        }
+
+        status.setIsHidden(true);
+        userStatusRepo.save(status);
+    }
+
 
 
     // =====================================================

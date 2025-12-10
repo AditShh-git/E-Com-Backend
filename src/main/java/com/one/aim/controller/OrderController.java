@@ -1,12 +1,14 @@
 package com.one.aim.controller;
 
+import com.one.aim.bo.CartBO;
 import com.one.aim.bo.InvoiceBO;
 import com.one.aim.bo.OrderBO;
+import com.one.aim.bo.ProductBO;
 import com.one.aim.mapper.OrderMapper;
+import com.one.aim.repo.CartRepo;
 import com.one.aim.repo.OrderRepo;
 import com.one.aim.rs.UserRs;
-import com.one.aim.service.FileService;
-import com.one.aim.service.InvoiceService;
+import com.one.aim.service.*;
 import com.one.utils.AuthUtils;
 import com.one.vm.utils.ResponseUtils;
 import lombok.RequiredArgsConstructor;
@@ -23,13 +25,15 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.one.aim.constants.MessageCodes;
 import com.one.aim.rq.OrderRq;
-import com.one.aim.service.OrderService;
 
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -39,6 +43,9 @@ public class OrderController {
 
     private final OrderService orderService;
     private final InvoiceService  invoiceService;
+    private final AdminSettingService adminSettingService;
+    private final CartRepo cartRepo;
+    private final ChargesService chargesService;
 
     // ---------------------------------------------------------
     // PLACE ORDER (USER)
@@ -113,6 +120,15 @@ public class OrderController {
     @DeleteMapping("/cancel/{orderId}")
     public ResponseEntity<?> cancelOrder(@PathVariable String orderId) throws Exception {
         return ResponseEntity.ok(orderService.cancelOrder(orderId));
+    }
+
+    @GetMapping("/calculate-charges")
+    public ResponseEntity<?> calculateCharges(
+            @RequestParam(required = false) Double subtotal,
+            @RequestParam(required = false) String shippingMethod,
+            @RequestParam(required = false) String state
+    ) {
+        return chargesService.calculate(subtotal, shippingMethod, state);
     }
 
 
