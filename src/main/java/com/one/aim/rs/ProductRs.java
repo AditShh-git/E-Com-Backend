@@ -28,11 +28,21 @@ public class ProductRs implements Serializable {
     private String sellerName;
 
     private String slug;
-
     // Multiple image URLs
     private List<String> imageUrls = new ArrayList<>();
 
-    //  used in shareable links
+    // Primary image for homepage card
+    private String image;
+
+    // In-stock indicator
+    private boolean inStock;
+
+    // Ratings for homepage
+    private Double averageRating;
+    private Long reviewCount;
+
+    // used in shareable links
     private String shareMessage;
+
 }
 

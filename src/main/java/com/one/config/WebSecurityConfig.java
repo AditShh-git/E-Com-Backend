@@ -132,7 +132,8 @@ public class WebSecurityConfig {
                         .requestMatchers(
                                 "/api/auth/**",
                                 "/api/files/public/**",
-                                "/api/files/private/**"
+                                "/api/files/private/**",
+                                "/api/public/category"
 
                 ).permitAll()
 

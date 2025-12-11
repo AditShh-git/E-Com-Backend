@@ -1,10 +1,11 @@
 package com.one.aim.controller;
 
-import com.one.aim.bo.ProductBO;
+import com.one.aim.rs.ProductCardRs;
 import com.one.aim.rs.ProductRs;
 import com.one.aim.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,30 +14,26 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/public/product")
-@Slf4j
 @RequiredArgsConstructor
+@Slf4j
 public class PublicProductController {
 
     private final ProductService productService;
 
     // ===========================================================
-    // PUBLIC: VIEW PRODUCT DETAILS (NO AUTH REQUIRED)
+    // PUBLIC: VIEW PRODUCT DETAILS BY SLUG
     // ===========================================================
     @GetMapping("/{slug}")
     public ResponseEntity<?> getShareProduct(@PathVariable String slug) throws Exception {
-
         String shareMessage = productService.getShareableProduct(slug);
 
         Map<String, Object> response = new HashMap<>();
         response.put("shareMessage", shareMessage);
-
         return ResponseEntity.ok(response);
     }
 
-
-
     // ===========================================================
-    // PUBLIC: GET PRODUCT IMAGES (NO AUTH REQUIRED)
+    // PUBLIC: GET PRODUCT IMAGES
     // ===========================================================
     @GetMapping("/{productId}/images")
     public ResponseEntity<?> getProductImages(@PathVariable Long productId) throws Exception {
@@ -45,41 +42,31 @@ public class PublicProductController {
     }
 
     // ===========================================================
-// PUBLIC: GET ALL PRODUCTS (optional pagination)
-// ===========================================================
-    @GetMapping("/list")
-    public ResponseEntity<?> listProducts(
-            @RequestParam(defaultValue = "0") int offset,
-            @RequestParam(defaultValue = "20") int limit
+    // PUBLIC: LIST PRODUCTS WITH FILTERS + PAGINATION
+    // ===========================================================
+    @GetMapping
+    public Page<ProductCardRs> getProducts(
+            @RequestParam(defaultValue = "") String category,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt,desc") String sort
     ) throws Exception {
-        log.debug("Executing RESTfulService [GET /api/public/product/list]");
-        return ResponseEntity.ok(productService.listProducts(offset, limit));
+        log.debug("Executing RESTfulService [GET /api/public/product]");
+        return productService.getProducts(category, page, size, sort);
     }
 
     // ===========================================================
-// PUBLIC: GET PRODUCTS BY CATEGORY
-// ===========================================================
-    @GetMapping("/category/{category}")
-    public ResponseEntity<?> getProductsByCategory(
-            @PathVariable String category,
-            @RequestParam(defaultValue = "0") int offset,
-            @RequestParam(defaultValue = "20") int limit
-    ) throws Exception {
-        log.debug("Executing RESTfulService [GET /api/public/product/category/{}]", category);
-        return ResponseEntity.ok(productService.getProductsByCategory(category, offset, limit));
-    }
-
+    // PUBLIC: SEARCH PRODUCTS BY NAME + CATEGORY FILTER
     // ===========================================================
-// PUBLIC: SEARCH PRODUCTS BY NAME
-// ===========================================================
     @GetMapping("/search")
-    public ResponseEntity<?> searchProducts(
-            @RequestParam String name,
-            @RequestParam(defaultValue = "0") int offset,
-            @RequestParam(defaultValue = "20") int limit
+    public Page<ProductCardRs> searchProducts(
+            @RequestParam String q,
+            @RequestParam(defaultValue = "") String category,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
     ) throws Exception {
         log.debug("Executing RESTfulService [GET /api/public/product/search]");
-        return ResponseEntity.ok(productService.searchProducts(name, offset, limit));
+        return productService.searchProducts(q, category, page, size);
     }
 
 }

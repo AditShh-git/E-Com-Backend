@@ -45,6 +45,10 @@ public class CartBO {
     @JoinColumn(name = "user_addcart_id")
     private UserBO userAddToCart;
 
+    private long taxAmount;        // per-cart-line tax (based on admin settings)
+    private long shippingAmount;   // per-cart-line shipping (based on admin settings)
+    private long totalPrice;
+
     @Lob
     @Column(columnDefinition = "LONGBLOB")
     private byte[] image;

@@ -7,14 +7,17 @@ import com.one.aim.service.CategoryService;
 import com.one.vm.core.BaseDataRs;
 import com.one.vm.core.BaseRs;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/admin/category")
+@RequestMapping("/api/category")
 @RequiredArgsConstructor
+@Slf4j
 public class CategoryController {
 
     private final CategoryService categoryService;
@@ -108,4 +111,38 @@ public class CategoryController {
         base.setData(new BaseDataRs(MessageCodes.MC_UPDATED_SUCCESSFULLY, null));
         return base;
     }
+
+    // ================================
+// UPLOAD CATEGORY IMAGE (ADMIN)
+// ================================
+    @PreAuthorize("hasAuthority('ADMIN')")
+    @PostMapping("/{id}/image")
+    public BaseRs uploadImage(
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file
+    ) throws Exception {
+
+        CategoryRs rs = categoryService.uploadCategoryImage(id, file);
+
+        BaseRs base = new BaseRs();
+        base.setStatus("SUCCESS");
+        base.setData(new BaseDataRs("Image uploaded successfully", rs));
+        return base;
+    }
+
+    // ================================
+// DELETE CATEGORY IMAGE (ADMIN)
+// ================================
+    @PreAuthorize("hasAuthority('ADMIN')")
+    @DeleteMapping("/{id}/image")
+    public BaseRs deleteImage(@PathVariable Long id) throws Exception {
+
+        CategoryRs rs = categoryService.deleteCategoryImage(id);
+
+        BaseRs base = new BaseRs();
+        base.setStatus("SUCCESS");
+        base.setData(new BaseDataRs("Image removed successfully", rs));
+        return base;
+    }
+
 }

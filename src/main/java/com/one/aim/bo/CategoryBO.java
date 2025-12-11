@@ -31,6 +31,9 @@ public class CategoryBO {
     @Column(nullable = false)
     private boolean active = true;
 
+    // Image for home page category cards
+    private Long imageFileId;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 
@@ -40,5 +43,5 @@ public class CategoryBO {
     private Double taxPercent;
     private Double deliveryCharge;
     private Integer returnPolicyDays;
-
 }
+

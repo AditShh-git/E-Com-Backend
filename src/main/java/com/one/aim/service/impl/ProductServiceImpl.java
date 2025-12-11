@@ -9,6 +9,7 @@ import com.one.aim.helper.ProductHelper;
 import com.one.aim.mapper.ProductMapper;
 import com.one.aim.repo.*;
 import com.one.aim.rq.ProductRq;
+import com.one.aim.rs.ProductCardRs;
 import com.one.aim.rs.ProductRs;
 import com.one.aim.rs.data.ProductDataRs;
 import com.one.aim.rs.data.ProductDataRsList;
@@ -810,6 +811,56 @@ public class ProductServiceImpl implements ProductService {
 
         return response;
     }
+
+    // ===========================================================
+// PUBLIC: HOMEPAGE PRODUCT LIST
+// ===========================================================
+    @Override
+    public Page<ProductCardRs> getProducts(String category, int page, int size, String sort) throws Exception {
+        Sort sortSpec;
+        try {
+            String[] sortParts = sort.split(",");
+            sortSpec = sortParts[1].equalsIgnoreCase("asc")
+                    ? Sort.by(sortParts[0]).ascending()
+                    : Sort.by(sortParts[0]).descending();
+        } catch (Exception e) {
+            sortSpec = Sort.by("createdAt").descending();
+        }
+
+        Pageable pageable = PageRequest.of(page, size, sortSpec);
+
+        Page<ProductBO> pageData;
+
+        if (category == null || category.isBlank()) {
+            pageData = productRepo.findByActiveTrue(pageable);
+        } else {
+            pageData = productRepo.findByActiveTrueAndCategoryNameIgnoreCase(category, pageable);
+        }
+
+        return pageData.map(p -> ProductMapper.toCardRs(p, fileService));
+    }
+
+
+    // ===========================================================
+// PUBLIC: HOMEPAGE SEARCH PRODUCTS
+// ===========================================================
+    @Override
+    public Page<ProductCardRs> searchProducts(String q, String category, int page, int size) throws Exception {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+
+        Page<ProductBO> pageData;
+
+        if (category == null || category.isBlank()) {
+            pageData = productRepo.findByActiveTrueAndNameContainingIgnoreCase(q, pageable);
+        } else {
+            pageData = productRepo.findByActiveTrueAndNameContainingIgnoreCaseAndCategoryNameIgnoreCase(
+                    q, category, pageable
+            );
+        }
+
+        return pageData.map(p -> ProductMapper.toCardRs(p, fileService));
+    }
+
 
 
 

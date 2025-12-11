@@ -36,4 +36,17 @@ public interface ProductRepo extends JpaRepository<ProductBO, Long> {
     Long countProductsBySeller(Long sellerId);
 
 
+    Page<ProductBO> findByActiveTrueAndCategoryNameIgnoreCase(String category, Pageable pageable);
+
+    Page<ProductBO> findByActiveTrueAndNameContainingIgnoreCase(String name, Pageable pageable);
+
+    Page<ProductBO> findByActiveTrueAndNameContainingIgnoreCaseAndCategoryNameIgnoreCase(
+            String name, String category, Pageable pageable
+    );
+
+
+    @Query("SELECT COUNT(p) FROM ProductBO p WHERE p.active = true AND p.categoryId = :categoryId")
+    Long countActiveProductsByCategory(Long categoryId);
+
+
 }

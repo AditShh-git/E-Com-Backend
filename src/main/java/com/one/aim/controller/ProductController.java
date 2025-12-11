@@ -43,6 +43,7 @@ public class ProductController {
         log.debug("Executing RESTfulService [PUT /api/seller/product/update]");
         BaseRs response = productService.updateProduct(rq);
         return ResponseEntity.ok(response);
+
     }
 
     // ===========================================================
